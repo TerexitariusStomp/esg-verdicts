@@ -202,7 +202,7 @@ def check_licenses(con):
         record("licenses", "WARN", "no db")
         return
     leaks = 0
-    for tbl, col in (("facilities", "source"),):
+    for tbl, col in (("facilities", "source"), ("verification", "source")):
         for r in con.execute(
                 f"SELECT DISTINCT {col} s FROM {tbl}").fetchall():
             if r["s"] in blocked:

@@ -10,6 +10,12 @@
   .label{font-size:.75rem;padding:.1rem .4rem;border-radius:3px;background:#eee}
   .documented{background:#d4edda}.reported{background:#fff3cd}.open{background:#f8d7da}
   #q{width:100%;padding:.5rem;margin:.8rem 0;font-size:1rem;box-sizing:border-box}
+  #cov{display:flex;flex-wrap:wrap;gap:.6rem;margin:1rem 0}
+  #cov div{background:#f4f4f4;border-radius:6px;padding:.5rem .8rem;font-size:.85rem}
+  #cov b{display:block;font-size:1.15rem}
+  .price{border:1px solid #ddd;border-radius:8px;padding:1rem;margin:1.5rem 0;background:#fafafa}
+  .price h2{font-size:1.05rem;margin:.2rem 0 .6rem}
+  .price td{font-size:.85rem}
 </style>
 </head>
 <body>
@@ -19,14 +25,34 @@ Every figure below is verbatim-sourced and hash-pinned. Labels:
 <span class="label documented">documented</span>
 <span class="label reported">reported</span>
 <span class="label open">open</span> — we do not assert intent.</p>
+<div id="cov"></div>
 <input id="q" placeholder="Search companies…">
-<table><thead><tr><th>Company</th><th>Reports</th><th>Flags</th><th>Status</th></tr></thead>
+<table><thead><tr><th>Company</th><th>Reports</th><th>Flags</th><th>Verdict</th></tr></thead>
 <tbody id="rows"></tbody></table>
+<div class="price">
+  <h2>For funders, counsel &amp; analysts</h2>
+  <table>
+    <tr><td><b>Evidence pack</b></td><td>per-company diligence: hashed exhibits, chain-of-custody, verbatim statements, divergence detail</td><td>from $5,000</td></tr>
+    <tr><td><b>Analyst tier</b></td><td>flag alerts, claims corpus search, pack downloads</td><td>$500/mo</td></tr>
+    <tr><td><b>Data license</b></td><td>bulk API/parquet feed for commercial use (academics &amp; press free)</td><td>from $25k/yr</td></tr>
+  </table>
+  <p class="sub" style="margin:.6rem 0 0">Every pack is reproducible: each exhibit is SHA-256 pinned and OpenTimestamps-anchored. Contact via the repository.</p>
+</div>
 <p class="sub" id="meta"></p>
 <script>
 const badge=s=>`<span class="label ${s}">${s}</span>`;
 fetch('data/index.json').then(r=>r.json()).then(d=>{
   const rows=d.companies||d;
+  const s=d.stats||{};
+  const card=(k,v)=>`<div><b>${(v??0).toLocaleString()}</b>${k}</div>`;
+  document.getElementById('cov').innerHTML=
+    card('companies cataloged',s.companies_with_reports)+
+    card('with reports in hand',s.companies_with_pdf)+
+    card('with verified metrics',s.companies_with_extractions)+
+    card('verbatim metrics',s.verified_metrics)+
+    card('public-statement claims',s.claims)+
+    card('publishable flags',s.flags_publishable)+
+    card('facilities attributed',s.facilities);
   document.getElementById('meta').textContent=
     `${rows.length} companies · generated ${d.generated||''}`;
   const render=q=>{
@@ -34,7 +60,7 @@ fetch('data/index.json').then(r=>r.json()).then(d=>{
       .filter(c=>!q||c.name.toLowerCase().includes(q))
       .map(c=>`<tr><td><a href="data/company/${c.slug||c.id}.json">${c.name}</a></td>
         <td>${c.reports??''}</td><td>${c.flags??''}</td>
-        <td>${badge(c.status||'open')}</td></tr>`).join('');
+        <td>${badge(c.verdict||'open')}</td></tr>`).join('');
   };
   render('');
   document.getElementById('q').oninput=e=>render(e.target.value.toLowerCase());

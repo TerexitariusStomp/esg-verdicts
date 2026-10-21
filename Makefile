@@ -69,7 +69,7 @@ review:
 	$(PY) tools/review/cli.py
 
 pack:
-	$(PY) -m esg.evidence
+	$(PY) -m esg.evidence --top 20
 
 production:
 	$(PY) tools/production/build.py

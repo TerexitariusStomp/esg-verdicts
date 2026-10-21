@@ -71,13 +71,13 @@ def export_statements(con):
 def export_flags(con):
     out = []
     for r in con.execute(
-            "SELECT * FROM flags ORDER BY company_id, severity DESC").fetchall():
+            "SELECT * FROM flags WHERE publishable=1 "
+            "ORDER BY company_id, severity DESC").fetchall():
         out.append({
             "flag_id": f"FL-{r['id']:05d}", "company_id": r["company_id"],
             "flag": r["flag"], "severity": r["severity"],
             "posture": r["posture"], "basis": r["basis"],
-            "pin": r["pin"] or "", "year": r["year"] or "",
-            "publishable": bool(r["publishable"])})
+            "pin": r["pin"] or "", "year": r["year"] or ""})
     _w(f"{REG}/flags.csv", out)
 
 
@@ -90,6 +90,34 @@ def export_figures(con):
             f["value"] = 0
     yaml.safe_dump({"figures": figs}, open(f"{REG}/figures.yaml", "w"),
                    sort_keys=False)
+
+
+def export_stats(con):
+    """Coverage metrics — the public marketing surface for the registry."""
+    q = lambda s: con.execute(s).fetchone()[0]
+    return {
+        "companies_total": q("SELECT COUNT(*) FROM companies"),
+        "companies_with_reports": q(
+            "SELECT COUNT(DISTINCT company_id) FROM reports"),
+        "companies_with_pdf": q(
+            "SELECT COUNT(DISTINCT company_id) FROM reports "
+            "WHERE path IS NOT NULL"),
+        "companies_with_extractions": q(
+            "SELECT COUNT(DISTINCT r.company_id) FROM extractions e "
+            "JOIN reports r ON r.id=e.report_id"),
+        "reports_cataloged": q("SELECT COUNT(*) FROM reports"),
+        "reports_harvested": q(
+            "SELECT COUNT(*) FROM reports WHERE path IS NOT NULL"),
+        "verified_metrics": q("SELECT COUNT(*) FROM extractions"),
+        "claims": q("SELECT COUNT(*) FROM claims"),
+        "flags_publishable": q(
+            "SELECT COUNT(*) FROM flags WHERE publishable=1"),
+        "flags_documented": q(
+            "SELECT COUNT(*) FROM flags WHERE publishable=1 "
+            "AND posture='documented'"),
+        "facilities": q("SELECT COUNT(*) FROM facilities"),
+        "litigation_matters": q("SELECT COUNT(*) FROM litigation"),
+    }
 
 
 def export_web(con):
@@ -107,13 +135,17 @@ def export_web(con):
         fc = con.execute(
             "SELECT COUNT(*) n FROM facilities WHERE company_id=?",
             (c["id"],)).fetchone()["n"]
+        rp = con.execute(
+            "SELECT COUNT(*) n FROM reports WHERE company_id=? "
+            "AND path IS NOT NULL", (c["id"],)).fetchone()["n"]
         companies.append({
             "id": c["id"], "name": c["name"], "ticker": c["ticker"],
             "country": c["country"], "sector": c["sector"],
             "verdict": verdict_for(con, c["id"]), "flags": fl,
-            "extractions": ex, "facilities": fc})
+            "reports": rp, "extractions": ex, "facilities": fc})
     with open(f"{WEB_DATA}/index.json", "w") as f:
-        json.dump({"generated": now(), "companies": companies}, f)
+        json.dump({"generated": now(), "stats": export_stats(con),
+                   "companies": companies}, f)
     # per-company detail for the UI drawer
     os.makedirs(f"{WEB_DATA}/company", exist_ok=True)
     for c in companies[:200]:
@@ -146,6 +178,9 @@ def export_parquet(con):
         for tbl in ("companies", "reports", "extractions", "facilities",
                     "verification", "claims", "flags", "litigation"):
             df = pd.read_sql_query(f"SELECT * FROM {tbl}", con)
+            for col in df.columns:
+                if df[col].dtype == object:
+                    df[col] = df[col].astype(str)
             df.to_parquet(f"web/data/parquet/{tbl}.parquet")
         return True
     except Exception as e:

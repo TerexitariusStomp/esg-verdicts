@@ -9,7 +9,6 @@
     {"name": "posture", "type": "string", "required": true, "enum": ["documented", "reported", "open"]},
     {"name": "basis", "type": "string", "required": true},
     {"name": "pin", "type": "string", "required": false},
-    {"name": "year", "type": "integer", "required": false},
-    {"name": "publishable", "type": "boolean", "required": true}
+    {"name": "year", "type": "integer", "required": false}
   ]
 }

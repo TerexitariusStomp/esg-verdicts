@@ -107,6 +107,10 @@ STAGES = [
     (["-m", "esg.verify"], "verify.log"),
     (["-m", "esg.flags"], "flags.log"),
     (["-m", "esg.export"], "export.log"),
+    # sales funnel: packs for severity-ordered flagged companies,
+    # then mirror publishable rows to D1 when ESG_SYNC_D1=1
+    (["-m", "esg.evidence", "--top", "20"], "packs.log"),
+    (["tools/sync_public.py"], "sync_public.log"),
 ]
 
 print(f"[{time.strftime('%H:%M')}] overnight supervisor start", flush=True)
