@@ -40,25 +40,33 @@ def _nym():
 
 
 def curl_fetch(url, proxy=None, timeout=300):
-    """curl subprocess -> (status, bytes). TLS fingerprint matches a real
-    client; 403 means a bad exit, rotate and let caller retry."""
+    """curl subprocess -> (status, body, returncode, elapsed). TLS fingerprint
+    matches a real client; 403 means a bad exit, rotate and let caller retry.
+    A curl timeout (rc 28) can still print %{http_code}=200 with a partial
+    body — the caller MUST check rc before trusting status."""
     cmd = ["curl", "-sL", "-m", str(timeout), "-o", "-",
            "-w", "\n%{http_code}", "-A", UA, "-e", REFERER,
            "--max-filesize", str(MAX_PDF)]
     if proxy:
         cmd += ["--proxy", proxy]
     cmd.append(url)
+    t0 = time.time()
     try:
-        out = subprocess.run(cmd, capture_output=True, timeout=timeout + 30)
-        body, _, code = out.stdout.rpartition(b"\n")
-        return int(code.strip() or 0), body
+        p = subprocess.run(cmd, capture_output=True, timeout=timeout + 30)
+        body, _, code = p.stdout.rpartition(b"\n")
+        status = int(code.strip() or 0)
+        if p.returncode != 0:
+            return 0, b"", p.returncode, time.time() - t0
+        return status, body, 0, time.time() - t0
     except Exception:
-        return 0, b""
+        return 0, b"", -1, time.time() - t0
 
 
 def sha256_store_put(data):
     if len(data) < 10_000 or data[:5] != b"%PDF-":
         raise ValueError("not a pdf")
+    if b"%%EOF" not in data[-1024:]:
+        raise ValueError("truncated pdf (no %%EOF trailer)")
     sha = sha256_bytes(data)
     os.makedirs(RAW, exist_ok=True)
     path = f"{RAW}/{sha}.pdf"
@@ -84,13 +92,14 @@ def pending(con, limit=0):
 
 
 def fetch_one(r, proxy, retries=4):
-    """One report: retries with NEWNYM rotation on 403. Returns
-    (report_id, status, body)."""
+    """One report: retries with NEWNYM rotation on 403 or a stalled/
+    timed-out circuit (a dying exit can crawl at ~10KB/s and every lane
+    shares it). Returns (report_id, status, body)."""
     for attempt in range(retries):
-        status, body = curl_fetch(r["url"], proxy)
-        if status == 200:
+        status, body, rc, elapsed = curl_fetch(r["url"], proxy)
+        if status == 200 and rc == 0:
             return r["id"], status, body
-        if status == 403 and proxy:
+        if proxy and (status == 403 or rc == 28 or elapsed > 90):
             _nym()
         else:
             time.sleep(min(20, 2 ** attempt * 2))

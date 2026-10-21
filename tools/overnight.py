@@ -119,7 +119,10 @@ while not os.path.exists(STOP):
     it += 1
     keepalive()
     if not running("m esg.harvest"):
-        bg([PY, "-m", "esg.harvest", "--workers", "6"], "harvest.log")
+        # bounded batch: process exits when drained, relaunch re-reads the
+        # catalog so newly-crawled reports join the breadth-first queue
+        bg([PY, "-m", "esg.harvest", "--workers", "6", "--limit", "800"],
+            "harvest.log")
     if not running("m esg.claims"):
         bg([PY, "-u", "-m", "esg.claims", "--workers", "8"], "claims.log")
     # expand catalog (2 shards) only when the harvest queue is draining
