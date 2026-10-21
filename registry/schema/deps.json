@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "fields": [
+    {"name": "dep", "type": "string", "required": true},
+    {"name": "role", "type": "string", "required": true},
+    {"name": "license", "type": "string", "required": true},
+    {"name": "tier", "type": "string", "required": true, "enum": ["required", "optional", "excluded"]},
+    {"name": "caution", "type": "string", "required": false}
+  ]
+}

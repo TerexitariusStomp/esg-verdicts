@@ -1,0 +1,8 @@
+# optional heavy deps — figure OCR, linkage, embeddings, rendering
+# install selectively; the pipeline degrades gracefully without them
+docling>=2.0            # MIT — layout/tables/figures (pulls torch)
+splink>=4.0             # MIT — record linkage (duckdb backend)
+sentence-transformers>=3 # Apache-2.0 — embeddings
+spacy>=3.7              # MIT — claims NLP
+sqlite-vec>=0.1.9       # MIT — vector search
+weasyprint>=62          # BSD — pack PDF rendering

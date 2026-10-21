@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "fields": [
+    {"name": "statement_id", "type": "string", "required": true},
+    {"name": "company_id", "type": "integer", "required": false},
+    {"name": "speaker_role", "type": "string", "required": true, "enum": ["official", "party_principal", "party_agent", "researcher", "third_party"]},
+    {"name": "speaker", "type": "string", "required": false},
+    {"name": "auth_status", "type": "string", "required": true, "enum": ["platform_render", "quoted", "screenshot", "pending"]},
+    {"name": "series", "type": "string", "required": true},
+    {"name": "pin", "type": "string", "required": true},
+    {"name": "metric_key", "type": "string", "required": false},
+    {"name": "value", "type": "number", "required": false},
+    {"name": "unit", "type": "string", "required": false},
+    {"name": "snippet", "type": "string", "required": true},
+    {"name": "date", "type": "string", "required": false},
+    {"name": "exhibit_id", "type": "string", "required": false}
+  ]
+}

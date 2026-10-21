@@ -1,0 +1,32 @@
+# Private working data — co-located but NEVER pushed
+data/
+evidence/
+ops/
+*.pdf
+*.db
+*.db-wal
+*.db-shm
+
+# Secrets
+*.key
+*.pem
+.env
+.env.*
+secrets*
+passphrase*
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# Node / web deps
+node_modules/
+
+# OS / editor
+.DS_Store
+*.swp
+*~

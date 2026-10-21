@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "fields": [
+    {"name": "flag_id", "type": "string", "required": true},
+    {"name": "company_id", "type": "integer", "required": true},
+    {"name": "flag", "type": "string", "required": true},
+    {"name": "severity", "type": "string", "required": true, "enum": ["low", "medium", "high"]},
+    {"name": "posture", "type": "string", "required": true, "enum": ["documented", "reported", "open"]},
+    {"name": "basis", "type": "string", "required": true},
+    {"name": "pin", "type": "string", "required": false},
+    {"name": "year", "type": "integer", "required": false},
+    {"name": "publishable", "type": "boolean", "required": true}
+  ]
+}

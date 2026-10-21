@@ -1,0 +1,17 @@
+source_id,name,url,license,commercial_use,redistributable,tier,cadence,role
+sec_edgar,SEC EDGAR,https://www.sec.gov/edgar,public_domain,true,true,public,daily,universe+filings
+gleif,GLEIF LEI API,https://www.gleif.org,CC0,true,true,public,weekly,entity resolution
+epa_ghgrp,EPA GHGRP,https://www.epa.gov/ghgreporting,public_domain,true,true,public,annual,ground truth
+eu_ets,EU ETS registry,https://climate.ec.europa.eu/eu-emissions-trading-system-eu-ets_en,EU public,true,true,public,annual,ground truth
+nger,Australia NGER,https://www.cleanenergyregulator.gov.au/NGER,AU public,true,true,public,annual,ground truth
+ca_ghgrp,Canada GHGRP,https://www.canada.ca/en/environment-climate-change,CA open gov,true,true,public,annual,ground truth
+climatetrace,Climate TRACE v7,https://api.climatetrace.org/v7,CC-BY-4.0,true,true,public,quarterly,ground truth+geo
+sabin_cldb,Sabin Climate Litigation DB (CP Radar),https://github.com/climatepolicyradar/litigation-data-mapper,Apache-2.0,true,true,public,monthly,litigation
+courtlistener,CourtListener/RECAP,https://www.courtlistener.com,open,true,true,public,weekly,litigation
+ca100_tpi,CA100+/TPI assessments,https://www.climateaction100.org,varies,true,false,public,annual,benchmarks (link-out)
+corporateregister,CorporateRegister,https://www.corporateregister.com,public pages,true,false,public,weekly,report catalog (link-out)
+wikirate,WikiRate,https://wikirate.org,CC-BY-SA,true,true,public,monthly,cross-validation
+responsibilityreports,responsibilityreports.com,https://www.responsibilityreports.com,public pages,true,false,public,weekly,report catalog (link-out)
+carbon_mapper,Carbon Mapper plumes,https://carbonmapper.org,modified CC BY-SA-NC,false,false,verification_only,monthly,methane cross-check ONLY
+urgewald_goGEL,Urgewald GCE/GOGEL,https://gogel.org,non-commercial,false,false,verification_only,annual,coal/oil-gas list cross-check ONLY
+climate_week_corpus,NYCW video corpus (GH climate-week-search),https://github.com/TerexitariusStomp/climate-week-search,own/AGPL,true,true,public,static,exec statements

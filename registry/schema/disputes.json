@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "fields": [
+    {"name": "dispute_id", "type": "string", "required": true},
+    {"name": "company_id", "type": "integer", "required": true},
+    {"name": "flag_id", "type": "string", "required": false},
+    {"name": "received", "type": "string", "required": true},
+    {"name": "channel", "type": "string", "required": false},
+    {"name": "statement", "type": "string", "required": true},
+    {"name": "resolution", "type": "string", "required": false}
+  ]
+}

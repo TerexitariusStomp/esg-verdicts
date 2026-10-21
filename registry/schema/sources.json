@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "fields": [
+    {"name": "source_id", "type": "string", "required": true},
+    {"name": "name", "type": "string", "required": true},
+    {"name": "url", "type": "string", "required": false},
+    {"name": "license", "type": "string", "required": true},
+    {"name": "commercial_use", "type": "boolean", "required": true},
+    {"name": "redistributable", "type": "boolean", "required": true},
+    {"name": "tier", "type": "string", "required": true, "enum": ["public", "verification_only"]},
+    {"name": "cadence", "type": "string", "required": false},
+    {"name": "role", "type": "string", "required": false}
+  ]
+}

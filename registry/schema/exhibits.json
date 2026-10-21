@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "fields": [
+    {"name": "exhibit_id", "type": "string", "required": true, "pattern": "^EX-[0-9]+$"},
+    {"name": "kind", "type": "string", "required": true, "enum": ["report_pdf", "page_render", "figure_crop", "filing", "video_segment", "registry_row", "other"]},
+    {"name": "company_id", "type": "integer", "required": false},
+    {"name": "sha256", "type": "string", "required": true, "pattern": "^[0-9a-f]{64}$"},
+    {"name": "source_url", "type": "string", "required": false},
+    {"name": "path", "type": "string", "required": true},
+    {"name": "acquired_at", "type": "string", "required": true},
+    {"name": "acquisition_method", "type": "string", "required": true, "enum": ["http_get", "api", "scrape", "derived", "manual"]},
+    {"name": "posture", "type": "string", "required": true, "enum": ["documented", "reported", "open"]}
+  ]
+}
