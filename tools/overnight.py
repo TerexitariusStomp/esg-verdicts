@@ -8,6 +8,7 @@ everything is resumable/idempotent.
 
   nohup .venv/bin/python tools/overnight.py > log/overnight.log 2>&1 &
 """
+import json
 import os
 import sqlite3
 import subprocess
@@ -79,6 +80,21 @@ def pending_pdfs():
         return 9999
 
 
+def uncrawled_slugs():
+    """RR slugs not yet recorded as catalog-done — the coverage frontier."""
+    try:
+        con = sqlite3.connect(DB)
+        total = con.execute(
+            "SELECT COUNT(*) FROM slug_map "
+            "WHERE source='responsibilityreports'").fetchone()[0]
+        done = len({json.loads(r[0]).get("slug") for r in con.execute(
+            "SELECT payload FROM jobs WHERE kind='catalog' "
+            "AND status='done'")})
+        return max(0, total - done)
+    except Exception:
+        return 1
+
+
 def snapshot(tag):
     try:
         con = sqlite3.connect(DB)
@@ -92,7 +108,8 @@ def snapshot(tag):
               f"pdf={q('select count(*) from reports where path is not null')}, "
               f"extract={q('select count(*) from extractions')}, "
               f"claims={q('select count(*) from claims')}, "
-              f"flags={q('select count(*) from flags')}", flush=True)
+              f"flags={q('select count(*) from flags')}, "
+              f"uncrawled={uncrawled_slugs()}", flush=True)
     except sqlite3.Error as e:
         print(f"[{time.strftime('%H:%M')}] snapshot failed: {e}", flush=True)
 
@@ -125,8 +142,9 @@ while not os.path.exists(STOP):
             "harvest.log")
     if not running("m esg.claims"):
         bg([PY, "-u", "-m", "esg.claims", "--workers", "8"], "claims.log")
-    # expand catalog (2 shards) only when the harvest queue is draining
-    if pending_pdfs() < 300:
+    # catalog shards run until every RR slug is crawled — breadth coverage
+    # IS the goal; they exit cleanly once slug_map is exhausted
+    if uncrawled_slugs() > 0:
         for m in range(2):
             if not running(f"catalog crawl --shard 2 {m}"):
                 bg([PY, "-u", "-m", "esg.catalog", "crawl",

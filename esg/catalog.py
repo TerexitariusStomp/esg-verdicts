@@ -165,11 +165,15 @@ class RRSpider(scrapy.Spider):
     async def start(self):
         con = db()
         proxy = os.environ.get("ESG_PROXY")
+        done = {json.loads(r["payload"]).get("slug") for r in con.execute(
+            "SELECT payload FROM jobs WHERE kind='catalog' AND "
+            "status='done'").fetchall()}
         rows = con.execute(
             """SELECT s.slug, s.company_id, c.priority FROM slug_map s
                LEFT JOIN companies c ON c.id = s.company_id
                WHERE s.source='responsibilityreports'
                ORDER BY COALESCE(c.priority,0) DESC, s.slug""").fetchall()
+        rows = [r for r in rows if r["slug"] not in done]
         if self.shard_n > 1:
             rows = rows[self.shard_m:: self.shard_n]
         if self.limit:
