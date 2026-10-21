@@ -236,6 +236,98 @@ def table_extract(pdf_path, page_no):
     return out
 
 
+_DOCLING = None
+
+
+def _docling_conv():
+    global _DOCLING
+    if _DOCLING is None:
+        from docling.datamodel.base_models import InputFormat
+        from docling.datamodel.pipeline_options import PdfPipelineOptions
+        from docling.document_converter import (DocumentConverter,
+                                                PdfFormatOption)
+        opts = PdfPipelineOptions()
+        opts.do_table_structure = True
+        opts.do_ocr = False  # layout+table only; OCR lane is RapidOCR
+        _DOCLING = DocumentConverter(format_options={
+            InputFormat.PDF: PdfFormatOption(pipeline_options=opts)})
+    return _DOCLING
+
+
+def docling_extract(pdf_path, page_no):
+    """Docling layout tier on a single page — catches borderless tables
+    pdfplumber misses. Rows -> CTX_RULES mapping, verbatim cells."""
+    import pymupdf
+    import tempfile
+    import os
+    try:
+        src = pymupdf.open(pdf_path)
+        if page_no < 1 or page_no > src.page_count:
+            return []
+        one = pymupdf.open()
+        one.insert_pdf(src, from_page=page_no - 1, to_page=page_no - 1)
+        with tempfile.NamedTemporaryFile(suffix=".pdf",
+                                         delete=False) as tf:
+            one.save(tf.name)
+            tmp = tf.name
+    except Exception:
+        return []
+    try:
+        doc = _docling_conv().convert(tmp).document
+    except Exception:
+        os.unlink(tmp)
+        return []
+    os.unlink(tmp)
+    out, seen = [], set()
+    for tbl in getattr(doc, "tables", []):
+        try:
+            df = tbl.export_to_dataframe(doc=doc)
+        except Exception:
+            continue
+        hdr_years = {}
+        for ci, c in enumerate(df.columns):
+            if re.fullmatch(r"(?:19|20)\d{2}", str(c).strip()):
+                hdr_years[ci] = int(str(c).strip())
+        for _, row in df.iterrows():
+            cells = [str(c) for c in row if str(c) not in ("nan", "")]
+            rtext = " ".join(cells)
+            if not rtext.strip():
+                continue
+            for ci, cell in enumerate(row):
+                cell = str(cell)
+                m = CTX_RE.search(cell)
+                if not m:
+                    continue
+                raw, unit = m.group(1), m.group(2).lower()
+                if re.fullmatch(r"(?:19|20)\d{2}", raw):
+                    continue
+                for pat, key, ufam, neg in CTX_RULES:
+                    if not re.search(ufam, unit, re.I):
+                        continue
+                    if not re.search(pat, rtext, re.I):
+                        continue
+                    if neg and re.search(neg, unit, re.I):
+                        continue
+                    try:
+                        val = _num(raw)
+                    except Exception:
+                        continue
+                    if not 1 <= val <= 1e11:
+                        continue
+                    val *= _scale_unit(unit, "")
+                    sig = (key, round(val, 4), hdr_years.get(ci))
+                    if sig in seen:
+                        continue
+                    seen.add(sig)
+                    out.append({"metric": key, "value": val,
+                                "unit": key.split("_")[-1],
+                                "year": hdr_years.get(ci),
+                                "snippet": rtext.strip()[:240],
+                                "tier": "docling", "confidence": 0.85})
+                    break
+    return out
+
+
 def regex_extract(text, report_year=None):
     """Deterministic tier. Returns list of metric dicts w/ verbatim snippets."""
     out = []
@@ -352,10 +444,11 @@ def process_job(con, job):
              p.get("figure_crop"), it["confidence"], it["tier"], None))
         inserted += 1
     # table tier: structured cells before paying for the model
-    if not inserted:
-        pdf_path = con.execute("SELECT path FROM reports WHERE id=?",
-                               (rid,)).fetchone()
-        for it in table_extract(pdf_path[0], page) if pdf_path else []:
+    pdf_path = (con.execute("SELECT path FROM reports WHERE id=?",
+                            (rid,)).fetchone()
+                if not inserted else None)
+    if pdf_path:
+        for it in table_extract(pdf_path[0], page):
             if not echo_gate(it["snippet"], text):
                 continue
             con.execute(
@@ -367,6 +460,21 @@ def process_job(con, job):
                 (rid, it["metric"], it["value"], it["unit"], it.get("year"),
                  it.get("scope"), it.get("target_year"), page, it["snippet"],
                  p.get("figure_crop"), it["confidence"], "table", None))
+            inserted += 1
+    # docling layout tier: borderless tables pdfplumber can't see
+    if not inserted and pdf_path and CTX_RE.search(text):
+        for it in docling_extract(pdf_path[0], page):
+            if not echo_gate(it["snippet"], text):
+                continue
+            con.execute(
+                """INSERT INTO extractions
+                   (report_id, metric_key, value, unit, year_covered, scope,
+                    target_year, page, snippet, figure_crop, confidence,
+                    tier, model)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (rid, it["metric"], it["value"], it["unit"], it.get("year"),
+                 it.get("scope"), it.get("target_year"), page, it["snippet"],
+                 p.get("figure_crop"), it["confidence"], "docling", None))
             inserted += 1
     # no NUM+UNIT on the page -> no metric can exist; skip LLM entirely
     if not inserted and not CTX_RE.search(text):
