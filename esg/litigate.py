@@ -34,7 +34,10 @@ def _norm(s):
 
 
 def company_lookup(con):
-    rows = con.execute("SELECT id,name,ticker FROM companies").fetchall()
+    rows = con.execute(
+        """SELECT DISTINCT c.id, c.name, c.ticker FROM companies c
+           JOIN reports r ON r.company_id = c.id
+           ORDER BY c.priority DESC""").fetchall()
     return [(r["id"], _norm(r["name"]), r["ticker"]) for r in rows]
 
 

@@ -12,6 +12,7 @@ import argparse
 import json
 import os
 import re
+import sqlite3
 import urllib.request
 
 from rapidfuzz import fuzz
@@ -143,8 +144,21 @@ def main():
     if not gw_up():
         print("gateway down — corpus ingested; classification deferred")
         return
+    try:
+        con.execute("ALTER TABLE claims_corpus ADD COLUMN processed "
+                    "INTEGER DEFAULT 0")
+        con.commit()
+    except sqlite3.OperationalError:
+        pass
+    # mark windows that already yielded claims (dedupe-safe resume)
+    con.execute("""UPDATE claims_corpus SET processed=1
+                   WHERE EXISTS (SELECT 1 FROM claims c
+                                 WHERE c.video_id=claims_corpus.video_id
+                                 AND c.start_s=claims_corpus.start_s)""")
+    con.commit()
     q = ("SELECT id, video_id, title, start_s, end_s, speaker, text "
-         "FROM claims_corpus WHERE text IS NOT NULL ORDER BY id")
+         "FROM claims_corpus WHERE text IS NOT NULL AND processed=0 "
+         "ORDER BY id")
     if a.limit:
         q += f" LIMIT {a.limit}"
     rows = con.execute(q).fetchall()
@@ -156,6 +170,8 @@ def main():
                 print("gateway died mid-run — stopping")
                 break
             total += insert_window(con, dict(row), items)
+            con.execute("UPDATE claims_corpus SET processed=1 WHERE id=?",
+                        (row["id"],))
             if i % 200 == 0:
                 con.commit()  # release the write lock for other stages
     con.commit()
