@@ -142,6 +142,11 @@ while not os.path.exists(STOP):
             "harvest.log")
     if not running("m esg.claims"):
         bg([PY, "-u", "-m", "esg.claims", "--workers", "8"], "claims.log")
+    # geo is network-bound (Climate TRACE API), small per-company commits —
+    # runs as a continuous lane, not a sequential stage; resumable via
+    # jobs markers, exits when every matched company is enriched
+    if not running("m esg.geo"):
+        bg([PY, "-u", "-m", "esg.geo", "--matched"], "geo.log")
     # catalog shards run until every RR slug is crawled — breadth coverage
     # IS the goal; they exit cleanly once slug_map is exhausted
     if uncrawled_slugs() > 0:

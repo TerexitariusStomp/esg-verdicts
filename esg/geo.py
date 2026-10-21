@@ -185,15 +185,26 @@ def main():
              "ON s.company_id=c.id ORDER BY c.priority DESC, c.id")
     if a.limit:
         q += f" LIMIT {a.limit}"
+    done = {json.loads(r["payload"]).get("company_id") for r in con.execute(
+        "SELECT payload FROM jobs WHERE kind='geo' AND status='done'"
+        ).fetchall()}
     total = 0
     for c in con.execute(q).fetchall():
+        if c["id"] in done:
+            continue
         try:
             n, conf = ingest_company(con, c, a.year)
             total += n
+            con.execute(
+                "INSERT INTO jobs(kind,status,payload) VALUES(?,?,?)",
+                ("geo", "done",
+                 json.dumps({"company_id": c["id"], "facilities": n})))
+            con.commit()  # per-company commit: no giant write txn
             if n:
                 print(f"{c['name']}: {n} facilities (conf {conf})")
         except Exception as e:
             print(f"{c['name']}: {e}")
+            con.rollback()
         time.sleep(0.2)
     r = refresh_emissions_rank(con)
     from .esg import recompute_priority
