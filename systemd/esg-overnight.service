@@ -1,0 +1,16 @@
+[Unit]
+Description=esg-verdicts overnight supervisor
+After=default.target
+
+[Service]
+WorkingDirectory=%h/CascadeProjects/esg-verdicts
+ExecStart=%h/CascadeProjects/esg-verdicts/.venv/bin/python -u tools/overnight.py
+Restart=on-failure
+RestartSec=30
+MemoryMax=512M
+Nice=10
+StandardOutput=append:%h/CascadeProjects/esg-verdicts/log/overnight.log
+StandardError=append:%h/CascadeProjects/esg-verdicts/log/overnight.log
+
+[Install]
+WantedBy=default.target

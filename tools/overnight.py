@@ -30,16 +30,53 @@ def running(pat):
                           capture_output=True).returncode == 0
 
 
+# per-lane cgroup memory caps (30GB box): a runaway stage is OOM-killed and
+# relaunched next iteration — the machine never freezes
+MEM_CAPS = [
+    ("esg.extract", "10G"),  # docling+torch+pdfplumber
+    ("esg.figures", "6G"),   # onnxruntime-gpu
+    ("esg.claims", "6G"),
+    ("esg.pages", "4G"),
+    ("esg.export", "4G"),
+    ("esg.geo", "3G"),
+    ("esg.catalog", "3G"),
+    ("esg.harvest", "2G"),
+    ("llama-server", "8G"),
+]
+MEM_DEFAULT = "3G"
+
+
+def capped(args):
+    mem = MEM_DEFAULT
+    for pat, m in MEM_CAPS:
+        if any(pat in a for a in args):
+            mem = m
+            break
+    return ["systemd-run", "--user", "--scope", "--quiet", "--collect",
+            "-p", f"MemoryMax={mem}"] + args
+
+
+def mem_ok():
+    """Only start heavy stages when >3GB is available."""
+    try:
+        for line in open("/proc/meminfo"):
+            if line.startswith("MemAvailable"):
+                return int(line.split()[1]) > 3 * 1024 * 1024
+    except OSError:
+        pass
+    return True
+
+
 def bg(args, log):
     with open(os.path.join(LOGDIR, log), "ab") as f:
-        return subprocess.Popen(args, cwd=ROOT, env=ENV,
+        return subprocess.Popen(capped(args), cwd=ROOT, env=ENV,
                                 stdout=f, stderr=subprocess.STDOUT)
 
 
 def seq(args, log, timeout=7200):
     with open(os.path.join(LOGDIR, log), "ab") as f:
         try:
-            subprocess.run([PY] + args, cwd=ROOT, env=ENV,
+            subprocess.run(capped([PY] + args), cwd=ROOT, env=ENV,
                            stdout=f, stderr=subprocess.STDOUT,
                            timeout=timeout)
         except subprocess.TimeoutExpired:
@@ -157,6 +194,10 @@ while not os.path.exists(STOP):
     snapshot(f"iter {it}")
     for args, log in STAGES:
         if os.path.exists(STOP):
+            break
+        if not mem_ok():
+            print(f"[{time.strftime('%H:%M')}] low memory — "
+                  "skipping remaining stages this iter", flush=True)
             break
         seq(args, log)
     time.sleep(180)

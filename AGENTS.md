@@ -6,7 +6,7 @@
 - Every stage is a CLI: `python -m esg.<stage>` (universe|catalog|harvest|pages|figures|extract|filings|geo|litigate|verify|flags|claims|greenwash|evaluate|evidence|export).
 - Ops: `make verify | views | stamp | export | pack | backup | restore | review | eval`.
 - systemd user timers in `systemd/` install to `~/.config/systemd/user/` — sequential oneshot chain, `Nice=15`, `MemoryMax=`.
-- Overnight run: `nohup .venv/bin/python -u tools/overnight.py >> log/overnight.log 2>&1 &` — supervisor relaunches network lanes (harvest/catalog shards/claims), runs DB/GPU stages sequentially, `touch STOP` for clean exit.
+- Overnight run: `systemctl --user enable --now esg-overnight.service` (unit in `systemd/`, copy to `~/.config/systemd/user/` + daemon-reload) — auto-starts at boot (linger), restarts on crash; `Restart=on-failure` so `touch STOP` still exits cleanly. Supervisor relaunches network lanes (harvest/catalog shards/claims/geo), runs DB/GPU stages sequentially under per-lane `systemd-run` cgroup caps (extract 10G, figures/claims 6G, llama-server 8G — a hog is OOM-killed and relaunched, the box never freezes) and skips heavy stages when MemAvailable<3G.
 - Stub companies: `python -m esg.catalog stubify` creates name-only `companies` rows (no CIK/ticker, keyword-boosted priority) for all 4,409 RR slugs — coverage targets every issuer, not just SEC-matched.
 
 ## Hard rules
