@@ -45,6 +45,10 @@ MEM_CAPS = [
 ]
 MEM_DEFAULT = "3G"
 
+# stages that build+teardown CUDA contexts every iteration — run CPU-side
+# to avoid NVRM unmap driver crashes (llama-server keeps the GPU)
+NO_GPU_STAGES = {"esg.figures", "esg.extract"}
+
 
 def capped(args):
     mem = MEM_DEFAULT
@@ -74,9 +78,14 @@ def bg(args, log):
 
 
 def seq(args, log, timeout=7200):
+    env = ENV
+    if any(s in args for s in NO_GPU_STAGES):
+        # per-iteration CUDA context churn trips NVRM unmap asserts on
+        # driver 610 — keep GPU for the long-lived llama-server only
+        env = dict(ENV, CUDA_VISIBLE_DEVICES="")
     with open(os.path.join(LOGDIR, log), "ab") as f:
         try:
-            subprocess.run(capped([PY] + args), cwd=ROOT, env=ENV,
+            subprocess.run(capped([PY] + args), cwd=ROOT, env=env,
                            stdout=f, stderr=subprocess.STDOUT,
                            timeout=timeout)
         except subprocess.TimeoutExpired:

@@ -42,7 +42,8 @@ def _preload_cudnn():
 try:
     _preload_cudnn()
     import onnxruntime as _ort
-    HAVE_GPU = "CUDAExecutionProvider" in _ort.get_available_providers()
+    HAVE_GPU = ("CUDAExecutionProvider" in _ort.get_available_providers()
+                and os.environ.get("CUDA_VISIBLE_DEVICES", "0") != "")
 except Exception:
     HAVE_GPU = False
 try:
