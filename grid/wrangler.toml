@@ -1,8 +1,9 @@
 name = "esg-grid"
 main = "worker.js"
 compatibility_date = "2026-01-01"
+account_id = "6c0140469651854b2e358517371a03d3"
 
 [[d1_databases]]
 binding = "DB"
 database_name = "esg-grid"
-database_id = "REPLACE_WITH_D1_ID"
+database_id = "1adbcc1d-5dc7-4dc8-96b0-fb2bbb4456eb"

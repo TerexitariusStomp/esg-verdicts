@@ -1,92 +1,44 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ESG Verdicts — evidence, not scores</title>
+<title>ESG Verdicts — evidence-grade divergence registry</title>
 <style>
-  :root{--hi:#e74c3c;--med:#f39c12;--low:#7f8c8d;--ok:#27ae60;--bg:#0d1117;--fg:#e6edf3;--mut:#8b949e}
-  *{box-sizing:border-box} body{font:14px/1.5 system-ui,system-ui,sans-serif;background:var(--bg);color:var(--fg);margin:0;padding:2rem}
-  h1{font-size:1.3rem} .sub{color:var(--mut);margin-bottom:1.5rem}
-  #q{width:100%;max-width:520px;padding:.6rem .8rem;background:#161b22;border:1px solid #30363d;border-radius:6px;color:var(--fg)}
-  table{border-collapse:collapse;width:100%;margin-top:1rem;font-size:.85rem}
-  th,td{text-align:left;padding:.45rem .6rem;border-bottom:1px solid #21262d}
-  th{color:var(--mut);font-weight:500}
-  .badge{padding:.15rem .5rem;border-radius:10px;font-size:.75rem;white-space:nowrap}
-  .b-hi{background:#3d1f1f;color:var(--hi)} .b-med{background:#3d331f;color:var(--med)}
-  .b-low{background:#21262d;color:var(--low)} .b-ok{background:#1f3d2a;color:var(--ok)}
-  a{color:#58a6ff;text-decoration:none} tr:hover{background:#161b22;cursor:pointer}
-  #drawer{position:fixed;top:0;right:0;width:min(720px,95vw);height:100vh;background:#0d1117;border-left:1px solid #30363d;padding:1.5rem;overflow-y:auto;display:none;z-index:10}
-  #drawer.open{display:block} .close{float:right;cursor:pointer;color:var(--mut)}
-  .card{border:1px solid #21262d;border-radius:8px;padding:1rem;margin:.8rem 0;background:#161b22}
-  .snip{font:12px/1.6 ui-monospace,monospace;background:#0d1117;border-left:3px solid #58a6ff;padding:.6rem;margin:.5rem 0;white-space:pre-wrap}
-  .pin{color:var(--mut);font-size:.75rem}
-  #map{height:380px;border-radius:8px;margin-top:1rem}
+  body{font:15px/1.5 system-ui,sans-serif;max-width:960px;margin:2rem auto;padding:0 1rem;color:#1a1a1a}
+  h1{font-size:1.6rem} .sub{color:#555;margin-bottom:1.5rem}
+  table{border-collapse:collapse;width:100%} td,th{border-bottom:1px solid #ddd;padding:.4rem .5rem;text-align:left;font-size:.9rem}
+  .label{font-size:.75rem;padding:.1rem .4rem;border-radius:3px;background:#eee}
+  .documented{background:#d4edda}.reported{background:#fff3cd}.open{background:#f8d7da}
+  #q{width:100%;padding:.5rem;margin:.8rem 0;font-size:1rem;box-sizing:border-box}
 </style>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 </head>
 <body>
 <h1>ESG Verdicts</h1>
-<p class="sub">Filed claims vs physical reality vs what executives said on camera.
-Every number verbatim + hash-pinned. <span id="gen"></span></p>
-<input id="q" placeholder="search companies…" autofocus>
-<table id="tbl"><thead><tr><th>Company</th><th>Verdict</th><th>Flags</th><th>Extractions</th><th>Facilities</th></tr></thead><tbody></tbody></table>
-
-<div id="drawer"><span class="close" onclick="closeDrawer()">✕ close</span><div id="drawerBody"></div></div>
-
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<p class="sub">Filed disclosures vs physical-world data vs public statements.
+Every figure below is verbatim-sourced and hash-pinned. Labels:
+<span class="label documented">documented</span>
+<span class="label reported">reported</span>
+<span class="label open">open</span> — we do not assert intent.</p>
+<input id="q" placeholder="Search companies…">
+<table><thead><tr><th>Company</th><th>Reports</th><th>Flags</th><th>Status</th></tr></thead>
+<tbody id="rows"></tbody></table>
+<p class="sub" id="meta"></p>
 <script>
-let DATA={companies:[]};
-const VERDICT_CLASS={"reported divergence":"b-hi","disclosure gap":"b-med","anomaly noted":"b-low","insufficient data":"b-low","no flags":"b-ok"};
-async function boot(){
-  const r=await fetch("data/index.json"); DATA=await r.json();
-  document.getElementById("gen").textContent="Built "+DATA.generated;
-  render(DATA.companies);
-}
-function render(rows){
-  const tb=document.querySelector("#tbl tbody"); tb.innerHTML="";
-  for(const c of rows){
-    const tr=document.createElement("tr");
-    tr.innerHTML=`<td><a>${c.name}</a></td>
-      <td><span class="badge ${VERDICT_CLASS[c.verdict]||"b-low"}">${c.verdict}</span></td>
-      <td>${c.flags}</td><td>${c.extractions}</td><td>${c.facilities}</td>`;
-    tr.onclick=()=>openCompany(c.id); tb.appendChild(tr);
-  }
-}
-document.getElementById("q").oninput=e=>{
-  const q=e.target.value.toLowerCase();
-  render(DATA.companies.filter(c=>(c.name+"").toLowerCase().includes(q)||(c.ticker+"").toLowerCase().includes(q)).slice(0,300));
-};
-async function openCompany(id){
-  const d=await (await fetch(`data/company/${id}.json`)).json();
-  let h=`<h2>${d.name}</h2><p class="sub">${d.ticker||""} · ${d.country||""} · ${d.sector||""}</p>`;
-  if(d.flags.length){
-    h+=`<h3>Flags</h3>`;
-    for(const f of d.flags) h+=`<div class="card"><b>${f.flag}</b> <span class="badge b-${f.severity=="high"?"hi":f.severity=="medium"?"med":"low"}">${f.severity}</span>
-      <div>${f.basis}</div><div class="pin">${f.posture} · ${f.pin||""} · ${f.year||""}</div></div>`;
-  }
-  if(d.extractions.length){
-    h+=`<h3>Extractions (verbatim)</h3>`;
-    for(const e of d.extractions.slice(0,30)) h+=`<div class="card"><b>${e.metric_key}</b> = ${e.value} ${e.unit}
-      <div class="snip">${e.snippet||""}</div><div class="pin">${e.tier} · report p${e.page||"?"} · ${e.year||e.year_covered||""}</div></div>`;
-  }
-  if(d.claims.length){
-    h+=`<h3>On-camera claims</h3>`;
-    for(const cl of d.claims.slice(0,20)) h+=`<div class="card"><b>${cl.speaker||"?"}</b> — ${cl.claim_type}
-      <div class="snip">${cl.snippet||""}</div><a href="${cl.link}" target="_blank">▶ watch at timestamp</a></div>`;
-  }
-  if(d.facilities.length){ h+=`<h3>Facilities (ground truth)</h3><div id="map"></div>`; }
-  document.getElementById("drawerBody").innerHTML=h;
-  document.getElementById("drawer").classList.add("open");
-  if(d.facilities.length){
-    const map=L.map("map").setView([20,0],2);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(map);
-    d.facilities.filter(f=>f.lat&&f.lon).forEach(f=>
-      L.circleMarker([f.lat,f.lon],{radius:Math.min(20,4+Math.log10(f.emissions||1))})
-       .bindTooltip(`${f.name}: ${(f.emissions||0).toLocaleString()} t CO₂e (${f.year})`).addTo(map));
-  }
-}
-function closeDrawer(){document.getElementById("drawer").classList.remove("open");}
-boot();
+const badge=s=>`<span class="label ${s}">${s}</span>`;
+fetch('data/index.json').then(r=>r.json()).then(d=>{
+  const rows=d.companies||d;
+  document.getElementById('meta').textContent=
+    `${rows.length} companies · generated ${d.generated||''}`;
+  const render=q=>{
+    document.getElementById('rows').innerHTML=rows
+      .filter(c=>!q||c.name.toLowerCase().includes(q))
+      .map(c=>`<tr><td><a href="data/company/${c.slug||c.id}.json">${c.name}</a></td>
+        <td>${c.reports??''}</td><td>${c.flags??''}</td>
+        <td>${badge(c.status||'open')}</td></tr>`).join('');
+  };
+  render('');
+  document.getElementById('q').oninput=e=>render(e.target.value.toLowerCase());
+});
 </script>
 </body>
 </html>

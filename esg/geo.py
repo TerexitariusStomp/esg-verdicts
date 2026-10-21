@@ -169,6 +169,8 @@ def _f(v):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--matched", action="store_true",
+                    help="only companies with a cataloged report slug")
     ap.add_argument("--year", type=int, default=2023)
     ap.add_argument("--ghgrp", default="",
                     help="path to EPA GHGRP flat CSV to import")
@@ -178,6 +180,9 @@ def main():
         n = import_ghgrp(con, a.ghgrp)
         print(f"ghgrp: {n} facilities imported")
     q = ("SELECT id, name FROM companies ORDER BY priority DESC, id")
+    if getattr(a, "matched", False):
+        q = ("SELECT c.id, c.name FROM companies c JOIN slug_map s "
+             "ON s.company_id=c.id ORDER BY c.priority DESC, c.id")
     if a.limit:
         q += f" LIMIT {a.limit}"
     total = 0

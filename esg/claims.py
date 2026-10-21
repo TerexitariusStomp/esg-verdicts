@@ -82,19 +82,37 @@ Return [] if no quantified claim. No explanation, no invented quotes.
 {text}"""
 
 
-def process_window(con, row):
-    """Classify a corpus window; write claims rows w/ verbatim snippet."""
+def work_window(row):
+    """Worker: prefilter + gateway call only (threads share no sqlite)."""
     if not METRIC_RE.search(row["text"] or ""):
-        return 0
+        return row, []
     out = gw_chat(json_mode=True, messages=[{"role": "user",
                     "content": CLASSIFY_PROMPT.replace(
                         "{text}", row["text"][:3000])}])
     if out is None:
-        return -1  # gateway down
-    n = 0
+        return row, None
+    good = []
     for it in extract_json_list(out):
         if not it.get("has_claim"):
             continue
+        v = it.get("value")
+        # value-in-text gate: the claimed number must literally appear
+        if v is not None:
+            vs = str(v).replace(",", "")
+            tx = (row["text"] or "").replace(",", "")
+            try:
+                vi = str(int(float(vs)))
+            except (TypeError, ValueError):
+                vi = None
+            if vs not in tx and (vi is None or vi not in tx):
+                continue
+        good.append(it)
+    return row, good
+
+
+def insert_window(con, row, items):
+    n = 0
+    for it in items or []:
         cid, conf = org_match(con, row["speaker"], row["title"])
         snippet = (row["text"] or "")[:400]
         link = f"https://youtu.be/{row['video_id']}?t={int(row['start_s'])}"
@@ -115,6 +133,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--ingest", action="store_true", help="only ingest corpus")
     ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--workers", type=int, default=8)
     a = ap.parse_args()
     con = db()
     n = ingest_corpus(con)
@@ -128,13 +147,18 @@ def main():
          "FROM claims_corpus WHERE text IS NOT NULL ORDER BY id")
     if a.limit:
         q += f" LIMIT {a.limit}"
+    rows = con.execute(q).fetchall()
     total = 0
-    for row in con.execute(q).fetchall():
-        r = process_window(con, dict(row))
-        if r == -1:
-            print("gateway died mid-run — stopping")
-            break
-        total += r
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=a.workers) as ex:
+        for i, (row, items) in enumerate(ex.map(work_window, rows)):
+            if items is None:
+                print("gateway died mid-run — stopping")
+                break
+            total += insert_window(con, dict(row), items)
+            if i % 200 == 0:
+                con.commit()  # release the write lock for other stages
+    con.commit()
     print(f"claims: {total} claims extracted")
     con.execute(
         "INSERT OR REPLACE INTO source_snapshots VALUES('claims',?,?,?,?)",
