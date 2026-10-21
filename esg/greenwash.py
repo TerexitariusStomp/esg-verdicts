@@ -42,8 +42,9 @@ TRIG = re.compile(
 
 
 def classify(text):
-    out = gw_chat([{"role": "user",
-                    "content": TAXONOMY_PROMPT.format(text=text[:3000])}])
+    out = gw_chat(json_mode=True, messages=[{"role": "user",
+                    "content": TAXONOMY_PROMPT.replace(
+                        "{text}", text[:3000])}])
     return out
 
 

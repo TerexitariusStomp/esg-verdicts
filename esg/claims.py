@@ -86,8 +86,9 @@ def process_window(con, row):
     """Classify a corpus window; write claims rows w/ verbatim snippet."""
     if not METRIC_RE.search(row["text"] or ""):
         return 0
-    out = gw_chat([{"role": "user",
-                    "content": CLASSIFY_PROMPT.format(text=row["text"][:3000])}])
+    out = gw_chat(json_mode=True, messages=[{"role": "user",
+                    "content": CLASSIFY_PROMPT.replace(
+                        "{text}", row["text"][:3000])}])
     if out is None:
         return -1  # gateway down
     n = 0

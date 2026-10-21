@@ -182,10 +182,14 @@ def gw_up(timeout=3) -> bool:
         return False
 
 
-def gw_chat(messages, model="auto", temperature=0.0, timeout=120):
+def gw_chat(messages, model="auto", temperature=0.0, timeout=120,
+            max_tokens=1024, json_mode=False):
     """OpenAI-compatible local gateway (frelm). Returns content str or None."""
     body = json.dumps({"model": model, "messages": messages,
-                       "temperature": temperature}).encode()
+                       "temperature": temperature,
+                       "max_tokens": max_tokens,
+                       **({"response_format": {"type": "json_object"}}
+                          if json_mode else {})}).encode()
     req = urllib.request.Request(
         GW, data=body, headers={"Content-Type": "application/json"})
     try:

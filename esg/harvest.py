@@ -1,113 +1,143 @@
-"""harvest.py — Scrapy downloader: reports rows -> SHA-256 content-addressed
-PDFs in data/raw/. Idempotent (content-addressed + fetched_at check), resumable.
+"""harvest.py — idempotent PDF downloader: reports rows -> SHA-256
+content-addressed files in data/raw/.
 
-One process per proxy lane via ESG_PROXY; AutoThrottle paces per-domain.
-Custody fields (acquired_at, acquisition_method) recorded on every fetch.
+Transport is curl subprocess, not urllib/scrapy: responsibilityreports' edge
+blocks the Twisted/OpenSSL TLS fingerprint (JA3) with nginx 403s even on good
+Tor exits, while curl through the same exit succeeds. ESG_PROXY (http CONNECT,
+e.g. tor HTTPTunnelPort :9080) routes through Tor; a 403 triggers stem NEWNYM
+rotation and the request is retried on a fresh exit (waits for a live exit —
+v1's bug was failing over to a dead path).
+
+Resumable: sha256 IS NULL selects unfetched rows; INSERT OR REPLACE on jobs.
 """
 import argparse
+import json
 import os
-
-import scrapy
-from scrapy.crawler import CrawlerProcess
-from scrapy.pipelines.files import FilesPipeline
+import subprocess
+import time
 
 from .esg import db, now, sha256_bytes
 
 RAW = "data/raw"
-UA = {"User-Agent": "esg-verdicts/1.0 research crawler"}
+# RR's edge 403s non-browser UAs on /HostedData/ paths; the files are public
+# and any browser downloads them, so identify as one (honest Referer kept).
+UA = ("Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 "
+      "Firefox/128.0")
+REFERER = "https://www.responsibilityreports.com/"
+MAX_PDF = 300 * 1024 * 1024
 
 
-class SHA256Store:
-    """Write download bytes to data/raw/<sha256>.pdf; return (path, sha)."""
-
-    @staticmethod
-    def put(data: bytes):
-        if len(data) < 10_000 or data[:5] != b"%PDF-":
-            raise ValueError("not a pdf")
-        sha = sha256_bytes(data)
-        os.makedirs(RAW, exist_ok=True)
-        path = f"{RAW}/{sha}.pdf"
-        if not os.path.exists(path):
-            with open(path, "wb") as f:
-                f.write(data)
-        return path, sha
+def _nym():
+    try:
+        from stem.control import Controller
+        c = Controller.from_port(port=int(
+            os.environ.get("ESG_TOR_CTRL", "9051")))
+        c.authenticate()
+        c.signal("NEWNYM")
+        time.sleep(8)  # wait for a live exit
+    except Exception:
+        time.sleep(15)  # no control port — just cool down
 
 
-class HarvestSpider(scrapy.Spider):
-    name = "esg_harvest"
-    custom_settings = {
-        "CONCURRENT_REQUESTS": 6,
-        "AUTOTHROTTLE_ENABLED": True,
-        "AUTOTHROTTLE_START_DELAY": 0.5,
-        "AUTOTHROTTLE_MAX_DELAY": 30.0,
-        "AUTOTHROTTLE_TARGET_CONCURRENCY": 1.0,
-        "RETRY_TIMES": 3,
-        "RETRY_HTTP_CODES": [429, 500, 502, 503, 504],
-        "DOWNLOAD_TIMEOUT": 180,
-        "USER_AGENT": UA["User-Agent"],
-        "DEFAULT_REQUEST_HEADERS": {
-            "Referer": "https://www.responsibilityreports.com/"},
-        "ROBOTSTXT_OBEY": False,   # PDF objects, not crawl paths
-        "LOG_LEVEL": "INFO",
-        "DOWNLOAD_MAXSIZE": 300 * 1024 * 1024,
-    }
+def curl_fetch(url, proxy=None, timeout=300):
+    """curl subprocess -> (status, bytes). TLS fingerprint matches a real
+    client; 403 means a bad exit, rotate and let caller retry."""
+    cmd = ["curl", "-sL", "-m", str(timeout), "-o", "-",
+           "-w", "\n%{http_code}", "-A", UA, "-e", REFERER,
+           "--max-filesize", str(MAX_PDF)]
+    if proxy:
+        cmd += ["--proxy", proxy]
+    cmd.append(url)
+    try:
+        out = subprocess.run(cmd, capture_output=True, timeout=timeout + 30)
+        body, _, code = out.stdout.rpartition(b"\n")
+        return int(code.strip() or 0), body
+    except Exception:
+        return 0, b""
 
-    async def start(self):
-        con = db()
-        proxy = os.environ.get("ESG_PROXY")
-        rows = con.execute(
-            """SELECT r.id, r.url, r.company_id FROM reports r
-               LEFT JOIN companies c ON c.id = r.company_id
-               WHERE r.sha256 IS NULL
-               ORDER BY COALESCE(c.priority,0) DESC, r.id""").fetchall()
-        if self.limit:
-            rows = rows[: int(self.limit)]
-        for r in rows:
-            meta = {"report_id": r["id"]}
-            if proxy:
-                meta["proxy"] = proxy
-            yield scrapy.Request(r["url"], meta=meta, callback=self.saved,
-                                 errback=self.failed)
 
-    def saved(self, response):
-        con = db()
-        rid = response.meta["report_id"]
-        try:
-            path, sha = SHA256Store.put(response.body)
-        except ValueError as e:
-            con.execute(
-                "INSERT OR REPLACE INTO jobs(kind,status,payload) VALUES(?,?,?)",
-                ("harvest", "bad_pdf", f'{{"report_id":{rid},"err":"{e}"}}'))
+def sha256_store_put(data):
+    if len(data) < 10_000 or data[:5] != b"%PDF-":
+        raise ValueError("not a pdf")
+    sha = sha256_bytes(data)
+    os.makedirs(RAW, exist_ok=True)
+    path = f"{RAW}/{sha}.pdf"
+    if not os.path.exists(path):
+        with open(path, "wb") as f:
+            f.write(data)
+    return path, sha
+
+
+def pending(con, limit=0):
+    q = """SELECT r.id, r.url FROM reports r
+           LEFT JOIN companies c ON c.id = r.company_id
+           WHERE r.sha256 IS NULL AND r.url LIKE '%.pdf'
+           ORDER BY COALESCE(c.priority,0) DESC, r.id"""
+    if limit:
+        q += f" LIMIT {limit}"
+    return con.execute(q).fetchall()
+
+
+def fetch_one(r, proxy, retries=4):
+    """One report: retries with NEWNYM rotation on 403. Returns
+    (report_id, status, body)."""
+    for attempt in range(retries):
+        status, body = curl_fetch(r["url"], proxy)
+        if status == 200:
+            return r["id"], status, body
+        if status == 403 and proxy:
+            _nym()
+        else:
+            time.sleep(min(20, 2 ** attempt * 2))
+    return r["id"], status, b""
+
+
+def run(con, limit=0, workers=4):
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    proxy = os.environ.get("ESG_PROXY")
+    rows = pending(con, limit)
+    ok = fail = 0
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        futs = {ex.submit(fetch_one, r, proxy): r for r in rows}
+        for i, fut in enumerate(as_completed(futs), 1):
+            rid, status, body = fut.result()
+            r = futs[fut]
+            if status == 200:
+                try:
+                    path, sha = sha256_store_put(body)
+                    con.execute(
+                        """UPDATE reports SET sha256=?, path=?, fetched_at=?,
+                           acquired_at=?, acquisition_method=? WHERE id=?""",
+                        (sha, path, now(), now(),
+                         "tor_tunnel" if proxy else "http_get", rid))
+                    ok += 1
+                except ValueError:
+                    con.execute(
+                        "INSERT OR REPLACE INTO jobs(kind,status,payload) "
+                        "VALUES(?,?,?)",
+                        ("harvest", "bad_pdf", f'{{"report_id":{rid}}}'))
+            else:
+                fail += 1
+                con.execute(
+                    "INSERT OR REPLACE INTO jobs(kind,status,payload) "
+                    "VALUES(?,?,?)",
+                    ("harvest", "failed",
+                     f'{{"report_id":{rid},"status":{status}}}'))
             con.commit()
-            return
-        con.execute(
-            """UPDATE reports SET sha256=?, path=?, fetched_at=?,
-               acquired_at=?, acquisition_method='http_get' WHERE id=?""",
-            (sha, path, now(), now(), rid))
-        con.commit()
-        yield {"report_id": rid, "sha256": sha}
-
-    def failed(self, failure):
-        con = db()
-        rid = failure.request.meta.get("report_id")
-        status = getattr(getattr(failure.value, "response", None), "status", None)
-        con.execute(
-            "INSERT OR REPLACE INTO jobs(kind,status,payload) VALUES(?,?,?)",
-            ("harvest", "failed",
-             f'{{"report_id":{rid},"status":{status}}}'.replace("None", "null")))
-        con.commit()
+            if i % 20 == 0:
+                print(f"harvest: {ok} ok, {fail} failed ({i}/{len(rows)})")
+    return ok, fail
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--limit", type=int, default=0)
-    ap.add_argument("--workers", type=int, default=6,
-                    help="concurrency hint (scrapy CONCURRENT_REQUESTS)")
+    ap.add_argument("--workers", type=int, default=4,
+                    help="concurrent curl lanes")
     a = ap.parse_args()
-    HarvestSpider.custom_settings["CONCURRENT_REQUESTS"] = a.workers
-    p = CrawlerProcess()
-    p.crawl(HarvestSpider, limit=a.limit)
-    p.start()
+    con = db()
+    ok, fail = run(con, a.limit, a.workers)
+    print(f"harvest: {ok} fetched, {fail} failed")
 
 
 if __name__ == "__main__":

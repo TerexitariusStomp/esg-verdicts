@@ -12,6 +12,7 @@ with sha256 recorded; OCR'd text goes through the same extract queue so
 echo-gating applies to the OCR TEXT (the figure crop is the visual exhibit).
 """
 import argparse
+import json
 import os
 
 import fitz
@@ -19,6 +20,31 @@ import fitz
 from .esg import db, now, sha256_bytes
 
 FIG_DIR = "data/figures"
+
+def _preload_cudnn():
+    """onnxruntime-gpu needs libcudnn.so.9 which lives in the pip
+    nvidia-cudnn-cu12 wheel — dlopen it global before ort loads."""
+    import ctypes
+    import glob as _g
+    import site
+    cands = []
+    for sp in site.getsitepackages() + [site.getusersitepackages()]:
+        cands += _g.glob(os.path.join(sp, "nvidia/cudnn/lib/libcudnn.so*"))
+    cands.append("libcudnn.so.9")
+    for p in cands:
+        try:
+            ctypes.CDLL(p, mode=ctypes.RTLD_GLOBAL)
+            return
+        except OSError:
+            continue
+
+
+try:
+    _preload_cudnn()
+    import onnxruntime as _ort
+    HAVE_GPU = "CUDAExecutionProvider" in _ort.get_available_providers()
+except Exception:
+    HAVE_GPU = False
 try:
     import rapidocr_onnxruntime  # noqa: F401  (optional)
     HAVE_ROCR = True
@@ -31,37 +57,68 @@ except Exception:
     HAVE_TESS = False
 
 
-def crop_images(report_id, pdf_path):
-    """Tier 0: pull embedded raster images off candidate pages -> PNG crops."""
+def candidate_pages(con, report_id):
+    """Pages already flagged ESG-relevant by pages.py (extract jobs)."""
+    return {int(json.loads(r[0]).get("page", -1))
+            for r in con.execute(
+                "SELECT payload FROM jobs WHERE kind='extract' AND "
+                "json_extract(payload,'$.report_id')=?",
+                (report_id,)).fetchall()}
+
+
+def crop_images(report_id, pdf_path, pages=None, max_crops=60):
+    """Tier 0: pull embedded raster images off CANDIDATE pages only (was: all
+    pages — 6x slower, mostly photos). Returns crop metadata."""
     os.makedirs(f"{FIG_DIR}/{report_id}", exist_ok=True)
     doc = fitz.open(pdf_path)
     out = []
-    for pno in range(len(doc)):
-        page = doc[pno]
+    pnos = pages if pages is not None else range(len(doc))
+    for pno in pnos:
+        if len(out) >= max_crops:
+            break
+        try:
+            page = doc[pno - 1] if pages is not None else doc[pno]
+        except Exception:
+            continue
         for idx, img in enumerate(page.get_images(full=True)):
             xref = img[0]
             try:
                 pix = fitz.Pixmap(doc, xref)
-                if pix.width < 200 or pix.height < 100:
+                if pix.width < 250 or pix.height < 150:
                     continue  # too small to carry a metric
                 if pix.n - pix.alpha > 3:
                     pix = fitz.Pixmap(fitz.csRGB, pix)
-                path = f"{FIG_DIR}/{report_id}/{pno+1}_{idx}.png"
+                path = f"{FIG_DIR}/{report_id}/{pno}_{idx}.png" \
+                    if pages is not None else \
+                    f"{FIG_DIR}/{report_id}/{pno+1}_{idx}.png"
                 pix.save(path)
                 with open(path, "rb") as f:
                     sha = sha256_bytes(f.read())
-                out.append({"page": pno + 1, "path": path, "sha256": sha,
+                out.append({"page": pno if pages is not None else pno + 1,
+                            "path": path, "sha256": sha,
                             "w": pix.width, "h": pix.height})
             except Exception:
                 continue
     return out
 
 
-def ocr_image(path):
-    """OCR a crop -> text (best engine available)."""
-    if HAVE_ROCR:
+_ENGINE = None
+
+
+def ocr_engine():
+    global _ENGINE
+    if _ENGINE is None and HAVE_ROCR:
         from rapidocr_onnxruntime import RapidOCR
-        res, _ = RapidOCR()(path)
+        _ENGINE = RapidOCR(det_use_cuda=HAVE_GPU, cls_use_cuda=HAVE_GPU,
+                           rec_use_cuda=HAVE_GPU)
+    return _ENGINE
+
+
+def ocr_image(path):
+    """OCR a crop -> text. GPU path ~0.2s/crop (20x CPU)."""
+    eng = ocr_engine()
+    if eng:
+        res, _ = eng(path)
         return "\n".join(r[1] for r in res or [])
     if HAVE_TESS:
         from PIL import Image
@@ -70,9 +127,14 @@ def ocr_image(path):
 
 
 def process_report(con, rid, path):
-    crops = crop_images(rid, path)
+    crops = crop_images(rid, path, pages=candidate_pages(con, rid))
+    # hash-dedupe: reports reuse the same image across pages; OCR once
+    seen = set()
     n_ocr = 0
     for c in crops:
+        if c["sha256"] in seen:
+            continue
+        seen.add(c["sha256"])
         txt = ocr_image(c["path"]) if (HAVE_ROCR or HAVE_TESS) else ""
         if txt.strip():
             n_ocr += 1

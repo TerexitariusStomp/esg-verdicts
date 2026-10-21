@@ -97,6 +97,145 @@ def snippet_of(text, m, span=160):
     return text[max(0, m.start() - 40):m.end() + span].strip()
 
 
+# --- context tier: number+unit within window of an ESG label ----------------
+# Catches table rows and "57 million tonnes" phrasing the strict patterns miss,
+# while staying fully verbatim (snippet is source text by construction).
+UNITS = (
+    r"(?:(?:million|thousand|billion)\s+)?(?:metric\s+)?"
+    r"(?:tonnes?|tons?|mt|kt|t)\s*(?:of\s+)?"
+    r"(?:co2e?|carbon(?:\s+dioxide)?(?:\s+equivalent)?|ghg)?|"
+    r"(?:mwh|gwh|twh|kwh|megajoules?|gj|mj|mmbtu)|"
+    r"(?:m3|cubic\s+met(?:er|re)s?|megalit(?:er|re)s?|lit(?:er|re)s?)|"
+    r"(?:%|percent|per\s+cent)|"
+    r"(?:g|kg|t)\s*co[₂2]e?/(?:boe|mj|gj)")
+# unit families a metric may be drawn from — the number's actual unit must
+# be in the metric's family, so "30% of energy use" can't become energy_mwh
+_MASS = r"tonnes?|tons?|mt|kt|t\b"
+_ENERGY = r"mwh|gwh|twh|kwh|megajoules?|gj|mj\b|mmbtu"
+_VOL = r"m3|cubic|megalit|lit(?:er|re)"
+_PCT = r"%|percent|per\s+cent"
+CTX_RULES = [
+    (r"scope\s*1|direct\s+(?:ghg\s+)?emissions", "scope1_mtco2e", _MASS,
+     r"co2|carbon|ghg|emission"),
+    (r"scope\s*2[^\n]{0,30}location", "scope2_loc_mtco2e", _MASS,
+     r"co2|carbon|ghg|emission"),
+    (r"scope\s*2[^\n]{0,30}market", "scope2_mkt_mtco2e", _MASS,
+     r"co2|carbon|ghg|emission"),
+    (r"scope\s*3|indirect\s+(?:ghg\s+)?emissions", "scope3_mtco2e", _MASS,
+     r"co2|carbon|ghg|emission"),
+    (r"carbon\s+intensity|emissions?\s+intensity", "intensity_kgco2e",
+     r"(?:g|kg|t)\s*co[₂2]e?/", None),
+    (r"energy|electricity", "energy_mwh", _ENERGY, r"co[₂2]"),
+    (r"renewable", "renewable_pct", _PCT, None),
+    (r"water", "water_m3", _VOL, r"co[₂2]"),
+    (r"waste", "waste_t", _MASS, r"co[₂2]|emission"),
+    (r"recycled|recycling", "recycled_pct", _PCT, None),
+    (r"reduced|avoided|cut\b", "reduction_tco2e", _MASS,
+     None),
+]
+NUM_NC = r"[\d,]+(?:\.\d+)?"
+CTX_RE = re.compile(rf"({NUM_NC})\s*({UNITS})", re.I)
+WINDOW = 60
+
+
+def context_extract(text):
+    """Deterministic context-tier: NUM+UNIT whose unit family and nearby
+    label agree on a metric. Verbatim by construction — no model involved."""
+    out = []
+    seen = set()
+    for m in CTX_RE.finditer(text):
+        raw, unit = m.group(1), m.group(2).lower()
+        lo = max(0, m.start() - WINDOW)
+        ctx = text[lo:m.end() + WINDOW]
+        for pat, key, ufam, neg in CTX_RULES:
+            if not re.search(ufam, unit, re.I):
+                continue
+            if not re.search(pat, ctx, re.I):
+                continue
+            if neg and re.search(neg, unit, re.I):
+                continue
+            if re.fullmatch(r"(?:19|20)\d{2}", raw):
+                continue
+            try:
+                val = _num(raw)
+            except Exception:
+                continue
+            if not 1 <= val <= 1e11:
+                continue
+            val *= _scale_unit(unit, "")
+            year = _year_near(text, m.start())
+            sig = (key, round(val, 4), year)
+            if sig in seen:
+                continue
+            seen.add(sig)
+            out.append({"metric": key, "value": val,
+                        "unit": key.split("_")[-1], "year": year,
+                        "snippet": ctx.strip()[:240], "tier": "context",
+                        "confidence": 0.75})
+            break
+    return out
+
+
+def table_extract(pdf_path, page_no):
+    """Deterministic table tier: pdfplumber rows carrying a metric label
+    plus a number+unit cell. Cells are verbatim — higher precision than LLM."""
+    import pdfplumber
+    try:
+        with pdfplumber.open(pdf_path) as pdf:
+            if page_no < 1 or page_no > len(pdf.pages):
+                return []
+            tables = pdf.pages[page_no - 1].extract_tables()
+    except Exception:
+        return []
+    out, seen = [], set()
+    for tbl in tables:
+        # year columns from header rows
+        hdr_years = {}
+        for row in tbl:
+            for ci, c in enumerate(row or []):
+                if c and re.fullmatch(r"(?:19|20)\d{2}", c.strip()):
+                    hdr_years[ci] = int(c.strip())
+        for row in tbl:
+            cells = [str(c) for c in (row or []) if c]
+            rtext = " ".join(cells)
+            if not rtext.strip():
+                continue
+            for ci, cell in enumerate(row or []):
+                if not cell:
+                    continue
+                m = CTX_RE.search(cell)
+                if not m:
+                    continue
+                raw, unit = m.group(1), m.group(2).lower()
+                if re.fullmatch(r"(?:19|20)\d{2}", raw):
+                    continue
+                for pat, key, ufam, neg in CTX_RULES:
+                    if not re.search(ufam, unit, re.I):
+                        continue
+                    if not re.search(pat, rtext, re.I):
+                        continue
+                    if neg and re.search(neg, unit, re.I):
+                        continue
+                    try:
+                        val = _num(raw)
+                    except Exception:
+                        continue
+                    if not 1 <= val <= 1e11:
+                        continue
+                    val *= _scale_unit(unit, "")
+                    year = hdr_years.get(ci)
+                    sig = (key, round(val, 4), year)
+                    if sig in seen:
+                        continue
+                    seen.add(sig)
+                    out.append({"metric": key, "value": val,
+                                "unit": key.split("_")[-1], "year": year,
+                                "snippet": rtext.strip()[:240],
+                                "tier": "table", "confidence": 0.8})
+                    break
+    return out
+
+
 def regex_extract(text, report_year=None):
     """Deterministic tier. Returns list of metric dicts w/ verbatim snippets."""
     out = []
@@ -142,10 +281,42 @@ JSON list only.
 {text}"""
 
 
+BATCH_PROMPT = """Extract environmental metrics from each ESG report page below.
+For EACH metric return a JSON list item:
+{"page": <page index 1-{n}>, "metric": one of scope1_mtco2e,
+scope2_loc_mtco2e, scope2_mkt_mtco2e, scope3_mtco2e, energy_mwh,
+renewable_pct, water_m3, waste_t, recycled_pct, emissions_intensity,
+netzero_target_year,
+ "value": number, "unit": "string", "year": int,
+ "scope": "1/2/3/null", "target_year": int|null,
+ "snippet": "EXACT substring copied verbatim from that page's text",
+ "confidence": 0.0-1.0}
+Only metrics literally stated. snippet MUST be verbatim. [] if none.
+JSON list only.
+
+{pages}"""
+
+
 def llm_extract(text):
     if not gw_up():
         return None
-    out = gw_chat([{"role": "user", "content": LLM_PROMPT.format(text=text[:12000])}])
+    out = gw_chat(json_mode=True, messages=[{"role": "user",
+                    "content": LLM_PROMPT.replace("{text}", text[:12000])}])
+    if out is None:
+        return None
+    return [it for it in extract_json_list(out)
+            if isinstance(it, dict) and it.get("metric")]
+
+
+def llm_extract_batch(texts):
+    """One call for N pages; items carry a 1-indexed 'page' field."""
+    if not gw_up():
+        return None
+    pages = "\n".join(f"---PAGE {i + 1}---\n{t[:4000]}"
+                      for i, t in enumerate(texts))
+    out = gw_chat(json_mode=True, messages=[{"role": "user",
+                  "content": BATCH_PROMPT.replace("{n}", str(len(texts)))
+                  .replace("{pages}", pages)}])
     if out is None:
         return None
     return [it for it in extract_json_list(out)
@@ -153,6 +324,8 @@ def llm_extract(text):
 
 
 def process_job(con, job):
+    """Regex tier (always) -> LLM tier only if regex found nothing on the page
+    (the expensive path is reserved for pages determinism missed)."""
     p = json.loads(job["payload"])
     rid, page = p["report_id"], p["page"]
     # source text: page txt, or OCR text for figure jobs
@@ -165,9 +338,8 @@ def process_job(con, job):
         con.execute("UPDATE jobs SET status='no_text' WHERE id=?", (job["id"],))
         con.commit()
         return 0
-    rows = regex_extract(text)
     inserted = 0
-    for it in rows:
+    for it in regex_extract(text) + context_extract(text):
         if not echo_gate(it["snippet"], text):
             continue
         con.execute(
@@ -177,16 +349,14 @@ def process_job(con, job):
                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (rid, it["metric"], it["value"], it["unit"], it.get("year"),
              it.get("scope"), it.get("target_year"), page, it["snippet"],
-             p.get("figure_crop"), it["confidence"], "regex", None))
+             p.get("figure_crop"), it["confidence"], it["tier"], None))
         inserted += 1
-    # LLM tier — only if gateway up
-    llm_rows = llm_extract(text)
-    status = "regex_done"
-    if llm_rows is not None:
-        status = "llm_done"
-        for it in llm_rows:
-            snip = str(it.get("snippet", ""))
-            if not echo_gate(snip, text):
+    # table tier: structured cells before paying for the model
+    if not inserted:
+        pdf_path = con.execute("SELECT path FROM reports WHERE id=?",
+                               (rid,)).fetchone()
+        for it in table_extract(pdf_path[0], page) if pdf_path else []:
+            if not echo_gate(it["snippet"], text):
                 continue
             con.execute(
                 """INSERT INTO extractions
@@ -194,32 +364,151 @@ def process_job(con, job):
                     target_year, page, snippet, figure_crop, confidence,
                     tier, model)
                    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                (rid, it["metric"], it.get("value"), it.get("unit"),
-                 it.get("year"), it.get("scope"), it.get("target_year"),
-                 page, snip, p.get("figure_crop"),
-                 it.get("confidence", 0.5), "llm", "gateway"))
+                (rid, it["metric"], it["value"], it["unit"], it.get("year"),
+                 it.get("scope"), it.get("target_year"), page, it["snippet"],
+                 p.get("figure_crop"), it["confidence"], "table", None))
             inserted += 1
+    # no NUM+UNIT on the page -> no metric can exist; skip LLM entirely
+    if not inserted and not CTX_RE.search(text):
+        inserted = -1
+    status = "regex_done" if inserted else "pending_llm"
     con.execute("UPDATE jobs SET status=? WHERE id=?", (status, job["id"]))
     con.commit()
     return inserted
 
 
+def llm_work(job):
+    """Worker: read text + gateway call only (no sqlite — threads can't share
+    the connection). Returns (job_id, payload, gated_items)."""
+    p = json.loads(job["payload"])
+    text = _page_text(p)
+    if text is None:
+        return job["id"], p, None
+    return job["id"], p, _gate_items(llm_extract(text) or [], text)
+
+
+def _page_text(p):
+    src_path = f"data/pages/{p['report_id']}/{p['page']}.txt"
+    if p.get("figure_crop"):
+        src_path = p["figure_crop"] + ".ocr.txt"
+    try:
+        return open(src_path).read()
+    except OSError:
+        return None
+
+
+def _gate_items(llm_rows, text):
+    good = []
+    for it in llm_rows:
+        snip = str(it.get("snippet", ""))
+        if not echo_gate(snip, text):
+            continue
+        v = it.get("value")
+        if v is not None:
+            vs = str(v).replace(",", "")
+            sn = snip.replace(",", "")
+            try:
+                vi = str(int(float(vs)))
+            except (TypeError, ValueError):
+                vi = None
+            if vs not in sn and (vi is None or vi not in sn):
+                continue
+        good.append(it)
+    return good
+
+
+def llm_work_batch(jobs):
+    """One gateway call for a batch of pages; items routed back by 'page'
+    field and verified per page (misattributed snippets fail that page's
+    echo gate -> recall loss only, never precision)."""
+    parts = [(job, json.loads(job["payload"])) for job in jobs]
+    texts = [_page_text(p) for _, p in parts]
+    results = [(job["id"], p, []) for (job, p) in parts]
+    live = [i for i, t in enumerate(texts) if t]
+    rows = llm_extract_batch([texts[i] for i in live])
+    if not rows:
+        return results
+    per = {i: [] for i in range(len(jobs))}
+    for it in rows:
+        try:
+            pi = int(it.get("page", 0)) - 1
+        except (TypeError, ValueError):
+            continue
+        slot = live[pi] if 0 <= pi < len(live) else None
+        if slot is not None:
+            per[slot].append(it)
+    for i, (job, p) in enumerate(parts):
+        if texts[i]:
+            results[i] = (job["id"], p, _gate_items(per[i], texts[i]))
+    return results
+
+
+def llm_insert(con, job_id, p, items):
+    n = 0
+    for it in items or []:
+        con.execute(
+            """INSERT INTO extractions
+               (report_id, metric_key, value, unit, year_covered, scope,
+                target_year, page, snippet, figure_crop, confidence,
+                tier, model)
+               VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (p["report_id"], it["metric"], it.get("value"), it.get("unit"),
+             it.get("year"), it.get("scope"), it.get("target_year"),
+             p["page"], str(it.get("snippet", "")), p.get("figure_crop"),
+             it.get("confidence", 0.5), "llm", "gateway"))
+        n += 1
+    con.execute("UPDATE jobs SET status='llm_done' WHERE id=?", (job_id,))
+    con.commit()
+    return n
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--limit", type=int, default=0)
-    ap.add_argument("--llm", action="store_true")
+    ap.add_argument("--llm", action="store_true",
+                    help="also run LLM on regex_done pages (deeper sweep)")
+    ap.add_argument("--llm-workers", type=int, default=4,
+                    help="parallel gateway slots (llama-server n_slots)")
+    ap.add_argument("--batch", type=int, default=3,
+                    help="pages per gateway call (0 = one call per page)")
     a = ap.parse_args()
     con = db()
+    # pass 1: regex + context tiers on pending and previously-LLM-queued pages
     q = ("SELECT id, payload FROM jobs WHERE kind='extract' AND "
-         "status IN ('pending','regex_done') ORDER BY id")
-    if not a.llm:
-        q = ("SELECT id, payload FROM jobs WHERE kind='extract' AND "
-             "status='pending' ORDER BY id")
+         "status IN ('pending','pending_llm') ORDER BY id")
     if a.limit:
         q += f" LIMIT {a.limit}"
     total = 0
     for job in con.execute(q).fetchall():
         total += process_job(con, job)
+    print(f"extract regex: {total} metrics")
+    # pass 2: LLM only where regex missed (or on all done pages if --llm),
+    # parallel across the gateway's slots
+    q2 = ("SELECT id, payload FROM jobs WHERE kind='extract' AND "
+          "status='pending_llm' ORDER BY id")
+    if a.llm:
+        q2 = ("SELECT id, payload FROM jobs WHERE kind='extract' AND "
+              "status IN ('pending_llm','regex_done') ORDER BY id")
+    if a.limit:
+        q2 += f" LIMIT {a.limit}"
+    jobs = con.execute(q2).fetchall()
+    if jobs and gw_up():
+        from concurrent.futures import ThreadPoolExecutor
+        total2 = 0
+        with ThreadPoolExecutor(max_workers=a.llm_workers) as ex:
+            if a.batch and a.batch > 1:
+                chunks = [jobs[i:i + a.batch]
+                          for i in range(0, len(jobs), a.batch)]
+                for results in ex.map(llm_work_batch, chunks):
+                    for job_id, p, items in results:
+                        total2 += llm_insert(con, job_id, p, items)
+            else:
+                for job_id, p, items in ex.map(llm_work, jobs):
+                    total2 += llm_insert(con, job_id, p, items)
+        print(f"extract llm: {total2} metrics on {len(jobs)} pages")
+        total += total2
+    elif jobs:
+        print(f"gateway down — {len(jobs)} pages stay pending_llm")
     print(f"extract: {total} metrics inserted")
     con.execute(
         "INSERT OR REPLACE INTO source_snapshots VALUES('extract',?,?,?,?)",
