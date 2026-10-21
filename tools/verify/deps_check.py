@@ -27,7 +27,9 @@ IMPORT_TO_DEP = {
     "duckdb": "duckdb", "pandas": "pandas", "pyarrow": "pyarrow",
     "orjson": "orjson", "rich": "rich", "jinja2": "jinja2",
     "weasyprint": "weasyprint", "langdetect": "langdetect",
-    "yaml": "pyyaml", "pandas": "pandas",
+    "yaml": "pyyaml", "pandas": "pandas", "PIL": "pillow",
+    "onnxruntime": "rapidocr", "cv2": "opencv-headless",
+    "shapely": "shapely", "pyclipper": "pyclipper",
 }
 STDLIB = set(sys.stdlib_module_names) | {"esg"}
 
@@ -45,7 +47,7 @@ def imports_in(path):
             for n in ast.walk(tree):
                 if isinstance(n, ast.Import):
                     out |= {a.name.split(".")[0] for a in n.names}
-                elif isinstance(n, ast.ImportFrom) and n.module:
+                elif isinstance(n, ast.ImportFrom) and n.module and not n.level:
                     out.add(n.module.split(".")[0])
     return out
 
@@ -62,10 +64,12 @@ def main():
         print(f"FAIL undeclared deps: {undeclared}")
         sys.exit(1)
     missing = []
-    for imp, dep in IMPORT_TO_DEP.items():
-        if dep in deps and deps[dep]["tier"] in ("required",):
-            if not importlib.util.find_spec(imp):
-                missing.append(dep)
+    for dep, row in deps.items():
+        if row["tier"] != "required":
+            continue
+        imps = [i for i, d in IMPORT_TO_DEP.items() if d == dep]
+        if imps and not any(importlib.util.find_spec(i) for i in imps):
+            missing.append(dep)
     if missing:
         print(f"WARN required deps not importable: {missing}")
     else:

@@ -79,7 +79,13 @@ def process_company(con, ticker, year=0, max_sections=4):
         (cid, fyear, url)).fetchone()
     rid = rid["id"] if rid else None
     n = 0
-    for name, text in sections_with_climate(f)[:max_sections]:
+    for i, (name, text) in enumerate(
+            sections_with_climate(f)[:max_sections], 1):
+        if rid:
+            # persist section text so the offline echo gate can verify
+            os.makedirs(f"data/pages/{rid}", exist_ok=True)
+            with open(f"data/pages/{rid}/{i}.txt", "w") as fp:
+                fp.write(text)
         for it in regex_extract(text):
             if rid:
                 con.execute(
@@ -89,7 +95,7 @@ def process_company(con, ticker, year=0, max_sections=4):
                        VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
                     (rid, it["metric"], it["value"], it["unit"],
                      it.get("year"), it.get("scope"), it.get("target_year"),
-                     None, it["snippet"], it["confidence"], "regex",
+                     i, it["snippet"], it["confidence"], "regex",
                      "edgartools"))
                 n += 1
     con.commit()

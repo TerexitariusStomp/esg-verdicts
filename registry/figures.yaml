@@ -31,5 +31,5 @@ figures:
     value: 0
     derivation: SELECT COUNT(*) FROM claims
   litigation:
-    value: 0
+    value: 5
     derivation: SELECT COUNT(*) FROM litigation

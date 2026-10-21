@@ -35,7 +35,7 @@ EOF
 
 # daily chain (sequential — later stages run after earlier finish, staggered
 # hours so heavy stages never overlap)
-mk catalog   "*-*-* 01:00" "$PY -m esg.catalog crawl --limit 0"
+mk catalog   "*-Mon 01:00" "$PY -m esg.catalog crawl --limit 0"
 mk harvest   "*-*-* 02:00" "$PY -m esg.harvest --workers 6"
 mk pages     "*-*-* 03:00" "$PY -m esg.pages"
 mk figures   "*-*-* 03:45" "$PY -m esg.figures"

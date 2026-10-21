@@ -49,3 +49,8 @@ report-analyst-core,eval harness,RPL,optional,"report_analyst/ only; api/jobs/se
 pyannote,diarization,MIT,excluded,"model weights gated on HF"
 climatebert,greenwash classifier,varies,optional,"verify weights license before use"
 climate-trace-tools,CT data helpers,MIT,optional,
+pyyaml,figures.yaml parsing,MIT,required,
+pillow,image handling for OCR crops,MIT-CMU,required,
+rapidocr,onnxruntime OCR for figure crops,Apache-2.0,required,
+shapely,rapidocr geometry dep,MIT,required,
+pyclipper,rapidocr dep,MIT,required,

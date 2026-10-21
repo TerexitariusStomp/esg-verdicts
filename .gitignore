@@ -26,6 +26,11 @@ __pycache__/
 # Node / web deps
 node_modules/
 
+# Generated export artifacts (rebuilt by make export / grid-manifest)
+web/data/
+web/pages/
+web/grid-manifest.json
+
 # OS / editor
 .DS_Store
 *.swp

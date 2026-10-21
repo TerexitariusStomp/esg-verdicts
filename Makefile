@@ -74,6 +74,12 @@ pack:
 production:
 	$(PY) tools/production/build.py
 
+grid-manifest:
+	$(PY) tools/grid/manifest.py
+
+timers:
+	bash systemd/install.sh
+
 manifest:
 	bash tools/refresh_manifest.sh
 
