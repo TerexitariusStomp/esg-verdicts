@@ -84,6 +84,68 @@ def index(con):
     return n_new
 
 
+_HEAVY = re.compile(
+    r"oil|gas|petrol|energy|power|utilit|mining|steel|alumin|cement|"
+    r"chemical|airline|airways|shipping|container|logistic|trucking|rail|"
+    r"automot|food|beverage|meat|pulp|paper|timber|forest|agri|fertiliz|"
+    r"refin|coal|lng|maritime|freight", re.I)
+_FIN = re.compile(r"bank|insur|financial", re.I)
+
+
+def stubify(con):
+    """Create stub companies for every unmatched slug so all 4,409
+    responsibilityreports issuers get coverage (private/foreign issuers
+    like Nestlé are often big emitters). Names come from the cached
+    /Companies index page — no re-fetch. Idempotent."""
+    import scrapy
+    try:
+        html = open("data/source/rr_companies.html", "rb").read()
+    except OSError:
+        print("stubify: no cached index — run `catalog index` first")
+        return 0
+    sel = scrapy.Selector(text=html.decode("utf-8", "ignore"))
+    disp = {}
+    for a in sel.css('a[href^="/Company/"]'):
+        slug = a.attrib["href"].split("/Company/", 1)[1].strip("/")
+        disp[slug] = (a.css("::text").get("") or "").strip()
+    n = 0
+    for (slug,) in con.execute(
+            "SELECT slug FROM slug_map WHERE source='responsibilityreports'"
+            " AND company_id IS NULL").fetchall():
+        name = disp.get(slug) or slug.replace("-", " ").title()
+        pri = 300 if _HEAVY.search(name) else (
+            100 if _FIN.search(name) else 0)
+        cur = con.execute(
+            "INSERT INTO companies (name, priority) VALUES(?,?)",
+            (name, pri))
+        con.execute(
+            "UPDATE slug_map SET company_id=? WHERE slug=? AND "
+            "source='responsibilityreports'", (cur.lastrowid, slug))
+        n += 1
+    # reports cataloged under NULL company can't be re-mapped (URLs carry
+    # no slug); drop them + their dependent jobs — re-crawl re-catalogs
+    # under the new stub ids
+    null_ids = [r[0] for r in con.execute(
+        "SELECT id FROM reports WHERE company_id IS NULL").fetchall()]
+    if null_ids:
+        import json as _json
+        gone = con.execute(
+            "DELETE FROM reports WHERE company_id IS NULL").rowcount
+        nj = 0
+        for jid, pl in con.execute(
+                "SELECT id, payload FROM jobs").fetchall():
+            try:
+                if _json.loads(pl).get("report_id") in null_ids:
+                    con.execute("DELETE FROM jobs WHERE id=?", (jid,))
+                    nj += 1
+            except Exception:
+                pass
+        con.commit()
+        print(f"stubify: dropped {gone} NULL-company reports + {nj} jobs")
+    print(f"stubify: {n} stub companies created")
+    return n
+
+
 class RRSpider(scrapy.Spider):
     name = "rr_company"
     custom_settings = {
@@ -91,7 +153,7 @@ class RRSpider(scrapy.Spider):
         "AUTOTHROTTLE_ENABLED": True,
         "AUTOTHROTTLE_START_DELAY": 1.0,
         "AUTOTHROTTLE_MAX_DELAY": 30.0,
-        "AUTOTHROTTLE_TARGET_CONCURRENCY": 1.0,
+        "AUTOTHROTTLE_TARGET_CONCURRENCY": 2.0,
         "RETRY_TIMES": 3,
         "RETRY_HTTP_CODES": [429, 500, 502, 503, 504],
         "DOWNLOAD_TIMEOUT": 60,
@@ -108,6 +170,8 @@ class RRSpider(scrapy.Spider):
                LEFT JOIN companies c ON c.id = s.company_id
                WHERE s.source='responsibilityreports'
                ORDER BY COALESCE(c.priority,0) DESC, s.slug""").fetchall()
+        if self.shard_n > 1:
+            rows = rows[self.shard_m:: self.shard_n]
         if self.limit:
             rows = rows[: int(self.limit)]
         for r in rows:
@@ -143,22 +207,26 @@ class RRSpider(scrapy.Spider):
         yield {"slug": slug, "company_id": cid, "reports": found}
 
 
-def crawl(limit=0):
+def crawl(limit=0, shard_n=1, shard_m=0):
     p = CrawlerProcess()
-    p.crawl(RRSpider, limit=limit or 0)
+    p.crawl(RRSpider, limit=limit or 0, shard_n=shard_n, shard_m=shard_m)
     p.start()
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("mode", nargs="?", default="index",
-                    choices=["index", "crawl"])
+                    choices=["index", "crawl", "stubify"])
     ap.add_argument("--limit", type=int, default=0)
-    a = ap.parse_args()
+    ap.add_argument("--shard", type=int, nargs=2, default=[1, 0],
+                    metavar=("N", "M"), help="crawl shard M of N")
+    a = parse_args = ap.parse_args()
     if a.mode == "index":
         index(db())
+    elif a.mode == "stubify":
+        stubify(db())
     else:
-        crawl(a.limit)
+        crawl(a.limit, a.shard[0], a.shard[1])
 
 
 if __name__ == "__main__":

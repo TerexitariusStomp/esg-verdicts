@@ -6,6 +6,8 @@
 - Every stage is a CLI: `python -m esg.<stage>` (universe|catalog|harvest|pages|figures|extract|filings|geo|litigate|verify|flags|claims|greenwash|evaluate|evidence|export).
 - Ops: `make verify | views | stamp | export | pack | backup | restore | review | eval`.
 - systemd user timers in `systemd/` install to `~/.config/systemd/user/` — sequential oneshot chain, `Nice=15`, `MemoryMax=`.
+- Overnight run: `nohup .venv/bin/python -u tools/overnight.py >> log/overnight.log 2>&1 &` — supervisor relaunches network lanes (harvest/catalog shards/claims), runs DB/GPU stages sequentially, `touch STOP` for clean exit.
+- Stub companies: `python -m esg.catalog stubify` creates name-only `companies` rows (no CIK/ticker, keyword-boosted priority) for all 4,409 RR slugs — coverage targets every issuer, not just SEC-matched.
 
 ## Hard rules
 

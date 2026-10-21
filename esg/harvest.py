@@ -72,7 +72,12 @@ def pending(con, limit=0):
     q = """SELECT r.id, r.url FROM reports r
            LEFT JOIN companies c ON c.id = r.company_id
            WHERE r.sha256 IS NULL AND r.url LIKE '%.pdf'
-           ORDER BY COALESCE(c.priority,0) DESC, r.id"""
+           ORDER BY
+             (SELECT COUNT(*) FROM reports r2
+              WHERE r2.company_id IS r.company_id AND r2.url LIKE '%.pdf'
+                AND (r2.year > r.year
+                     OR (r2.year = r.year AND r2.id < r.id))) ASC,
+             COALESCE(c.priority,0) DESC, r.id"""
     if limit:
         q += f" LIMIT {limit}"
     return con.execute(q).fetchall()

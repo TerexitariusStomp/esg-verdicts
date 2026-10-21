@@ -84,6 +84,10 @@ def snapshot(tag):
         con = sqlite3.connect(DB)
         q = lambda s: con.execute(s).fetchone()[0]
         print(f"[{time.strftime('%H:%M')}] {tag}: "
+              f"companies={q('select count(distinct company_id) from reports')}"
+              f"/{q('select count(*) from companies')}, "
+              f"cos_with_pdf={q('select count(distinct company_id) from reports where path is not null')}, "
+              f"cos_with_xtract={q('select count(distinct company_id) from extractions e join reports r on r.id=e.report_id')}, "
               f"reports={q('select count(*) from reports')}, "
               f"pdf={q('select count(*) from reports where path is not null')}, "
               f"extract={q('select count(*) from extractions')}, "
@@ -114,10 +118,12 @@ while not os.path.exists(STOP):
         bg([PY, "-m", "esg.harvest", "--workers", "6"], "harvest.log")
     if not running("m esg.claims"):
         bg([PY, "-u", "-m", "esg.claims", "--workers", "8"], "claims.log")
-    # expand catalog only when the harvest queue is draining
-    if pending_pdfs() < 300 and not running("m esg.catalog"):
-        bg([PY, "-u", "-m", "esg.catalog", "crawl", "--limit", "60"],
-           "catalog.log")
+    # expand catalog (2 shards) only when the harvest queue is draining
+    if pending_pdfs() < 300:
+        for m in range(2):
+            if not running(f"catalog crawl --shard 2 {m}"):
+                bg([PY, "-u", "-m", "esg.catalog", "crawl",
+                    "--shard", "2", str(m)], f"catalog{m}.log")
     snapshot(f"iter {it}")
     for args, log in STAGES:
         if os.path.exists(STOP):
