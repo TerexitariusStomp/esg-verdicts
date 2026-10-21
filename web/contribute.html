@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Contribute compute — ESG Verdicts</title>
+<style>
+  body{font:15px/1.6 system-ui,sans-serif;background:#0d1117;color:#e6edf3;max-width:640px;margin:3rem auto;padding:0 1rem}
+  button{font-size:1.1rem;padding:.8rem 2rem;background:#238636;color:#fff;border:0;border-radius:8px;cursor:pointer}
+  button:disabled{background:#30363d;cursor:default}
+  .stat{background:#161b22;border:1px solid #21262d;border-radius:8px;padding:1rem;margin:1rem 0;font:13px ui-monospace,monospace}
+  .mut{color:#8b949e}
+</style>
+</head>
+<body>
+<h1>Lend your browser</h1>
+<p class="mut">Verifying corporate climate claims takes compute. Your browser can run
+extraction work units — everything happens on your device; only verified results
+(verbatim snippets + hashes) are sent back. No account, no tracking.</p>
+<div class="stat" id="cap">detecting…</div>
+<button id="go" disabled>Start contributing</button>
+<div class="stat" id="log">idle</div>
+<script type="module">
+const cap=document.getElementById("cap"), log=document.getElementById("log"), go=document.getElementById("go");
+const gpu=!!navigator.gpu;
+cap.textContent = gpu
+  ? "WebGPU detected → you can run the LLM tier (t1) plus regex extraction."
+  : "No WebGPU → you'll run the lighter regex + OCR tier (t0). Still valuable.";
+go.disabled=false;
+go.onclick=async()=>{
+  go.disabled=true; go.textContent="contributing…";
+  log.textContent="loading worker…";
+  try{
+    const {workLoop}=await import("../grid/browser-worker.js");
+    for await (const n of workLoop()) log.textContent=`last unit: ${n} verified results submitted`;
+  }catch(e){log.textContent="stopped: "+e;}
+};
+</script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+name = "esg-grid"
+main = "worker.js"
+compatibility_date = "2026-01-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "esg-grid"
+database_id = "REPLACE_WITH_D1_ID"

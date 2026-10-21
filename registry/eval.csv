@@ -1,0 +1,11 @@
+evaluated_at,tier,metric,precision,recall,f1,tp,fp,fn
+2026-10-21T01:54:10Z,regex,ALL,0.667,0.444,0.533,4,2,5
+2026-10-21T01:54:10Z,regex,energy_mwh,,,,0,0,1
+2026-10-21T01:54:10Z,regex,netzero_target_year,,,,1,0,0
+2026-10-21T01:54:10Z,regex,recycled_pct,,,,1,0,0
+2026-10-21T01:54:10Z,regex,renewable_pct,,,,0,0,1
+2026-10-21T01:54:10Z,regex,scope1_mtco2e,,,,0,0,1
+2026-10-21T01:54:10Z,regex,scope2_mkt_mtco2e,,,,1,1,0
+2026-10-21T01:54:10Z,regex,scope3_mtco2e,,,,0,0,1
+2026-10-21T01:54:10Z,regex,waste_t,,,,1,0,0
+2026-10-21T01:54:10Z,regex,water_m3,,,,1,1,0

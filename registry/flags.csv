@@ -1,0 +1,5 @@
+flag_id,company_id,flag,severity,posture,basis,pin,year,publishable
+FL-00002,2,yoy_anomaly,low,documented,"filed scope1 100 → 2,000,000 t (+1999900%)",report#74,2023,True
+FL-00001,2,yoy_anomaly,low,documented,filed scope1 2 → 100 t (+4900%),report#74,2023,True
+FL-00003,2,yoy_anomaly,low,documented,"filed scope1 2,000,000 → 2 t (+100%)",report#74,2023,True
+FL-00004,2,yoy_anomaly,low,documented,"filed scope1 2 → 2,000,000 t (+99999900%)",report#74,2024,True

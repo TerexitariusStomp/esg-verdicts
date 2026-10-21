@@ -1,0 +1,147 @@
+statement_id,company_id,speaker_role,speaker,auth_status,series,pin,metric_key,value,unit,snippet,date,exhibit_id
+ST-E000001,2,official,,platform_render,R,report#74@p26,renewable_pct,91.0,pct,"provides additional details on Apple’s renewable 
+energy solutions.
+91%
+Apple-created renewable 
+sources account for 
+about 91 percent of the 
+renewable electricity that 
+our facilities use.
+Supporting social impact
+Our Power for I",2019,
+ST-E000002,2,official,,platform_render,R,report#74@p27,renewable_pct,25.0,pct,"19%
+Other technology
+44%
+Wind
+1%
+Onsite renewable electricity
+25%
+Renewable power purchases
+8%
+Direct investments
+66%
+Renewable energy certificates
+TECHNOLOGIES
+Supplier renewable energy technologies
+We work with our supplier",2024,
+ST-E000003,2,official,,platform_render,R,report#74@p32,scope1_mtco2e,100.0,tco2e,"ining focused on reporting and 
+abating scope 1 emissions, with 
+more than 100 attendees.
+20%
+less emissions
+In 2023, we reduced emissions from 
+transporting products by 20 percent 
+compared with 2022.
+*	
+Based on data reported to Apple b",2023,
+ST-E000004,2,official,,platform_render,R,report#74@p34,scope1_mtco2e,100.0,tco2e,"eries focused 
+on reporting and abating scope 1 emissions, with 
+over 100 supplier attendees. 
+We continue to launch supplier programs targeted 
+at addressing direct emissions from energy 
+and processes that produce Apple products.",2023,
+ST-E000005,2,official,,platform_render,R,report#74@p77,scope1_mtco2e,2.0,tco2e,"ple’s carbon footprint includes 
+direct scope 1 emissions; indirect scope 2 
+emissions from purchased electricity, steam, 
+heating, and cooling; and indirect scope 3 
+emissions from purchased goods and services, 
+transportation and dis",2020,
+ST-E000006,2,official,,platform_render,R,report#74@p81,renewable_pct,4.0,pct,"3,199,000
+2,854,000
+2,580,000
+2,430,000
+Renewable electricity percentage4
+% of total energy
+100
+100
+100
+100
+100
+Scope 2 emissions avoided
+metric tons CO2e
+1,144,000
+1,201,000
+1,063,720
+948,000
+899,000
+Supply chain5
+Renewable electricit",2021,
+ST-E000007,2,official,,platform_render,R,report#74@p88,scope1_mtco2e,2000000.0,tco2e,"al gas
+(MMBtu)
+Renewable
+biogas (MMBtu)
+Scope 1 emissions (metric 
+tons CO2e)
+Electricity
+(million kWh)
+Renewable electricity 
+(million kWh)
+Scope 2 emissions 
+(market-based, metric 
+tons CO2e)1
+Corporate
+1,007,071
+746,506
+42,746
+940
+9",2023,
+ST-E000008,2,official,,platform_render,R,report#74@p97,scope1_mtco2e,2.0,tco2e,"Greenhouse Gas (GHG) Emissions: Direct Scope 1 emissions by weight, Indirect Scope 2 
+emissions by weight, Indirect Scope 3 emissions by weight (Purchased Goods and 
+Services, Fuel and Energy Related Activities, Employee Commute and Business Tr",2023,
+ST-E000009,2,official,,platform_render,R,report#74@p97,scope2_loc_mtco2e,1206700.0,tco2e,"properties / WRI/WBCSD 
+GHG Protocol 
+Scope 2 GHG Emissions 
+(Location-Based) 
+1,206,700 
+ 
+tCO2e 
+Worldwide occupied 
+properties / WRI/WBCSD 
+GHG Protocol 
+Scope 2 GHG Emissions 
+(Market-Based) 
+3,400 
+tCO2e 
+Worldwide occupied 
+properties / WRI/WBCSD 
+GHG",2023,
+ST-E000010,2,official,,platform_render,R,report#74@p97,scope2_mkt_mtco2e,3400.0,tco2e,"properties / WRI/WBCSD 
+GHG Protocol 
+Scope 2 GHG Emissions 
+(Market-Based) 
+3,400 
+tCO2e 
+Worldwide occupied 
+properties / WRI/WBCSD 
+GHG Protocol 
+Scope 3 Transmission and 
+Distribution Loses (Market-
+Based) 
+0 
+tCO2e 
+Worldwide occupied 
+properti",2024,
+ST-E000011,2,official,,platform_render,R,report#74@p98,scope1_mtco2e,2000000.0,tco2e,"Chain  
+ 
+1. 
+Corporate GHG Emissions = Scope 1 GHG Emissions + Scope 2 (Market-Based) GHG Emissions + Scope 3 GHG Emissions 
+2. 
+Product Use emissions (4.65 million metric tonnes) reportedly verified by another third-party provide",2024,
+ST-E000012,2,official,,platform_render,R,report#74@p98,waste_t,3300.0,t,"s / Apple Internal 
+Protocol 
+Hazardous Waste 
+(Regulated waste) 
+3,300 
+Metric tonnes 
+Worldwide occupied 
+properties / Apple Internal 
+Protocol 
+Recycled Material (Removal 
+by recycling contractor) 
+37,000 
+Metric tonnes 
+Worldwide occupied",2024,
+ST-E000013,41,official,,platform_render,R,report#76@pNone,scope1_mtco2e,46.0,tco2e,"2024      2023      2016
+  Scope 1 emissions (gross) [A]                46                         50        50        72
+  Scope 2 emissions (gross) [B]                7                           8         7        11
+  Carbon credit",2016,

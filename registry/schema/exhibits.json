@@ -9,7 +9,7 @@
     {"name": "source_url", "type": "string", "required": false},
     {"name": "path", "type": "string", "required": true},
     {"name": "acquired_at", "type": "string", "required": true},
-    {"name": "acquisition_method", "type": "string", "required": true, "enum": ["http_get", "api", "scrape", "derived", "manual"]},
+    {"name": "acquisition_method", "type": "string", "required": true, "enum": ["http_get", "api", "scrape", "direct_download", "derived", "manual"]},
     {"name": "posture", "type": "string", "required": true, "enum": ["documented", "reported", "open"]}
   ]
 }

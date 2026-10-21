@@ -1,0 +1,2 @@
+exhibit_id,kind,company_id,sha256,source_url,path,acquired_at,acquisition_method,posture
+EX-0001,report_pdf,2,87e86dbe8545c2006ad4e9af3e7e01b0ff713d4535171f924e06c32cc1bda5ba,https://www.apple.com/environment/pdf/Apple_Environmental_Progress_Report_2024.pdf,data/raw/87e86dbe8545c2006ad4e9af3e7e01b0ff713d4535171f924e06c32cc1bda5ba.pdf,2026-10-21T01:52:53Z,direct_download,documented
