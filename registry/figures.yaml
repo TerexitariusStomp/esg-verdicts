@@ -3,29 +3,29 @@ figures:
     value: 12796
     derivation: SELECT COUNT(*) FROM companies
   reports:
-    value: 3417
+    value: 16901
     derivation: SELECT COUNT(*) FROM reports
   reports_harvested:
-    value: 74
+    value: 413
     derivation: SELECT COUNT(*) FROM reports WHERE sha256 IS NOT NULL
   extractions:
-    value: 2145
+    value: 4966
     derivation: SELECT COUNT(*) FROM extractions
   facilities:
-    value: 242
+    value: 1152
     derivation: SELECT COUNT(*) FROM facilities
   facilities_matched:
-    value: 242
+    value: 1152
     derivation: SELECT COUNT(*) FROM facilities WHERE company_id IS NOT NULL
   match_rate:
     value: 1.0
     derivation: SELECT ROUND(1.0*SUM(company_id IS NOT NULL)/MAX(COUNT(*),1),3) FROM
       facilities
   flags:
-    value: 112
+    value: 380
     derivation: SELECT COUNT(*) FROM flags
   flags_publishable:
-    value: 96
+    value: 364
     derivation: SELECT COUNT(*) FROM flags WHERE publishable=1
   claims:
     value: 250

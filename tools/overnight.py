@@ -204,6 +204,9 @@ while not os.path.exists(STOP):
     for args, log in STAGES:
         if os.path.exists(STOP):
             break
+        # supervisor restarts orphan stage children — never double-run one
+        if running(" ".join(a for a in args if "esg." in a or a.endswith(".py"))):
+            continue
         if not mem_ok():
             print(f"[{time.strftime('%H:%M')}] low memory — "
                   "skipping remaining stages this iter", flush=True)

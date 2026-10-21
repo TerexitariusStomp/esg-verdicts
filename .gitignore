@@ -38,3 +38,8 @@ web/grid-manifest.json
 wrangler/
 .wrangler/
 log/
+
+# ots stamp side artifacts
+MANIFEST-meta.txt.prev
+MANIFEST-meta.txt.ots.prev
+MANIFEST.sha256.ots.prev

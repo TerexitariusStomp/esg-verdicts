@@ -99,7 +99,11 @@ def fetch_one(r, proxy, retries=4):
         status, body, rc, elapsed = curl_fetch(r["url"], proxy)
         if status == 200 and rc == 0:
             return r["id"], status, body
-        if proxy and (status == 403 or rc == 28 or elapsed > 90):
+        if status in (404, 410):
+            return r["id"], status, b""  # real answer — don't burn retries
+        # 403/429/503 = throttled or dead exit; rc!=0 = conn/TLS failure;
+        # elapsed>90 = stalled circuit. All need a fresh exit, not backoff.
+        if proxy and (status in (403, 429, 503) or rc != 0 or elapsed > 90):
             _nym()
         else:
             time.sleep(min(20, 2 ** attempt * 2))
