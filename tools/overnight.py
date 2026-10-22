@@ -133,7 +133,9 @@ def keepalive():
             # q8 KV cache halves the ~7.4GB fp16 KV to fit the 12GB card.
             "-c", "65536", "-np", "8",
             "--cache-type-k", "q8_0", "--cache-type-v", "q8_0",
-            "-fa", "--jinja"], "llama.log")
+            # this build treats bare -fa as a parse error — needs 'on'
+            # explicitly, before --jinja
+            "-fa", "on", "--jinja"], "llama.log")
         time.sleep(15)
 
 
