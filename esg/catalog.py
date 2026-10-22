@@ -235,23 +235,14 @@ class RRSpider(scrapy.Spider):
 
 
 class ARSpider(RRSpider):
-    """annualreports.com — same operator/layout as RR but a different
-    catalog (annual reports, AnnualReportArchive) and an unthrottled edge.
-    ESG_PROXY unset for it: direct fetches measured 4.6MB/s."""
+    """annualreports.com — same operator/host/layout as RR (literally the
+    same IP; it firewall-blocked us along with RR), so it crawls through
+    ESG_PROXY like the RR spider. KIND differs (annual reports,
+    AnnualReportArchive)."""
     name = "ar_company"
     SOURCE = "annualreports"
     BASE_URL = AR_BASE
     KIND = "annual_report"
-
-    async def start(self):
-        # direct fetch — AR's edge doesn't throttle like RR's
-        proxy = os.environ.pop("ESG_PROXY", None)
-        try:
-            async for req in super().start():
-                yield req
-        finally:
-            if proxy is not None:
-                os.environ["ESG_PROXY"] = proxy
 
 
 def crawl(limit=0, shard_n=1, shard_m=0, spider=RRSpider):

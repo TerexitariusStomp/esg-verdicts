@@ -30,6 +30,7 @@ FL-00080,2,yoy_anomaly,low,documented,"filed scope1 2,000,000 → 2 t (+100%)",r
 FL-00079,2,yoy_anomaly,low,documented,"filed scope1 250 → 2,000,000 t (+799900%)",report#74,2024
 FL-00081,2,yoy_anomaly,low,documented,"filed scope1 2 → 2,000,000 t (+99999900%)",report#77,2025
 FL-00761,4,yoy_anomaly,low,documented,"filed scope1 17 → 428,000 t (+2517547%)",report#14161,2020
+FL-01624,4,yoy_anomaly,low,documented,"filed scope1 428,000 → 17 t (+100%)",report#14161,2020
 FL-00763,4,yoy_anomaly,low,documented,filed scope1 23 → 96 t (+323%),report#14161,2022
 FL-00762,4,yoy_anomaly,low,documented,"filed scope1 428,000 → 17 t (+100%)",report#14161,2022
 FL-00764,4,yoy_anomaly,low,documented,filed scope1 96 → 23 t (+76%),report#14161,2022
@@ -49,6 +50,9 @@ FL-00019,36,disclosure_gap,medium,reported,"7 facilities w/ Σ16,029,729 t groun
 FL-00768,36,yoy_anomaly,low,documented,"filed scope1 2 → 2,000,000 t (+99999900%)",report#12991,2021
 FL-00769,36,yoy_anomaly,low,documented,"filed scope1 2,000,000 → 18,000 t (+99%)",report#12991,2021
 FL-00767,36,yoy_anomaly,low,documented,"filed scope1 2,000,000 → 2 t (+100%)",report#12991,2021
+FL-01626,37,yoy_anomaly,low,documented,filed scope1 2 → 5 t (+138%),report#22241,2022
+FL-01627,37,yoy_anomaly,low,documented,filed scope1 5 → 10 t (+100%),report#22241,2022
+FL-01625,37,yoy_anomaly,low,documented,"filed scope1 727,283 → 2 t (+100%)",report#22241,2022
 FL-00020,41,disclosure_gap,medium,reported,"23 facilities w/ Σ79,621,850 t ground-truth emissions but no filed scope-1 disclosure",,2023
 FL-00092,41,yoy_anomaly,low,documented,filed scope1 13 → 46 t (+254%),report#76,2016
 FL-00091,41,yoy_anomaly,low,documented,"filed scope1 13 → 70,000,000 t (+538461438%)",report#62,2016
@@ -63,6 +67,7 @@ FL-00025,41,yoy_anomaly,low,documented,"filed scope1 51,000,000 → 90 t (+100%)
 FL-00026,41,yoy_anomaly,low,documented,filed scope1 90 → 2 t (+98%),report#56,2022
 FL-00770,42,yoy_anomaly,low,documented,"filed scope1 2 → 44,200 t (+2209900%)",report#12588,2023
 FL-00027,49,disclosure_gap,medium,reported,"1 facilities w/ Σ22,853 t ground-truth emissions but no filed scope-1 disclosure",,2023
+FL-01628,59,yoy_anomaly,low,documented,"filed scope1 1,000 → 131,000 t (+13000%)",report#22127,2022
 FL-00028,73,disclosure_gap,medium,reported,"32 facilities w/ Σ114,953,830 t ground-truth emissions but no filed scope-1 disclosure",,2023
 FL-00771,73,yoy_anomaly,low,documented,filed scope1 46 → 2 t (+96%),report#11601,2015
 FL-00772,73,yoy_anomaly,low,documented,"filed scope1 2 → 64,000 t (+3199900%)",report#11601,2020
@@ -136,6 +141,8 @@ FL-00819,171,yoy_anomaly,low,documented,"filed scope1 5,228 → 13,700,000 t (+2
 FL-00823,171,yoy_anomaly,low,documented,filed scope1 94 → 232 t (+147%),report#20987,2020
 FL-00036,190,disclosure_gap,medium,reported,"7 facilities w/ Σ7,473,048 t ground-truth emissions but no filed scope-1 disclosure",,2023
 FL-00825,190,yoy_anomaly,low,documented,"filed scope1 2 → 2,022,000 t (+101099900%)",report#12040,2022
+FL-01629,212,yoy_anomaly,low,documented,"filed scope1 430,114 → 6 t (+100%)",report#23622,2022
+FL-01630,212,yoy_anomaly,low,documented,filed scope1 9 → 2 t (+82%),report#23622,2022
 FL-00829,213,yoy_anomaly,low,documented,filed scope1 13 → 2 t (+85%),report#12661,2022
 FL-00848,256,yoy_anomaly,low,documented,"filed scope1 2 → 227,093 t (+11354550%)",report#15928,2022
 FL-00849,256,yoy_anomaly,low,documented,"filed scope1 227,093 → 64 t (+100%)",report#15928,2024
@@ -161,6 +168,12 @@ FL-00859,281,yoy_anomaly,low,documented,"filed scope1 2,000,000 → 5,000,000 t 
 FL-00857,281,yoy_anomaly,low,documented,"filed scope1 3 → 7,700,000 t (+296153746%)",report#21098,2020
 FL-00858,281,yoy_anomaly,low,documented,"filed scope1 7,700,000 → 2,000,000 t (+74%)",report#21098,2020
 FL-00040,284,disclosure_gap,medium,reported,"6 facilities w/ Σ4,522,791 t ground-truth emissions but no filed scope-1 disclosure",,2023
+FL-01631,289,yoy_anomaly,low,documented,filed scope1 1 → 2 t (+100%),report#23689,2021
+FL-01633,289,yoy_anomaly,low,documented,"filed scope1 132,029 → 2 t (+100%)",report#23677,2022
+FL-01632,289,yoy_anomaly,low,documented,"filed scope1 2 → 132,029 t (+6601350%)",report#23689,2022
+FL-01634,289,yoy_anomaly,low,documented,"filed scope1 2 → 51,117 t (+2555750%)",report#23677,2022
+FL-01635,289,yoy_anomaly,low,documented,"filed scope1 51,117 → 1 t (+100%)",report#23677,2022
+FL-01636,289,yoy_anomaly,low,documented,"filed scope1 1 → 137,410 t (+13740900%)",report#23677,2023
 FL-00041,291,disclosure_gap,medium,reported,"11 facilities w/ Σ4,014,012 t ground-truth emissions but no filed scope-1 disclosure",,2023
 FL-00860,308,yoy_anomaly,low,documented,filed scope1 1 → 2 t (+100%),report#22029,2021
 FL-00861,308,yoy_anomaly,low,documented,filed scope1 2 → 11 t (+451%),report#22029,2021
@@ -229,10 +242,15 @@ FL-00052,450,disclosure_gap,medium,reported,"5 facilities w/ Σ5,612,298 t groun
 FL-00920,450,reported_divergence,medium,documented,"filed scope1 95 t vs Σfacility 5,612,298 t (-100%)",report#11926,2023
 FL-00921,450,yoy_anomaly,low,documented,filed scope1 30 → 95 t (+217%),report#11926,2022
 FL-00053,467,disclosure_gap,medium,reported,"3 facilities w/ Σ100,778 t ground-truth emissions but no filed scope-1 disclosure",,2023
+FL-01567,467,yoy_anomaly,low,documented,"filed scope1 550,700 → 16 t (+100%)",report#21884,2005
+FL-01568,467,yoy_anomaly,low,documented,"filed scope1 16 → 2,556,000 t (+15974900%)",report#21881,2008
 FL-01495,467,yoy_anomaly,low,documented,"filed scope1 550,700 → 2,556,000 t (+364%)",report#21881,2008
 FL-01496,467,yoy_anomaly,low,documented,"filed scope1 2,556,000 → 104,000 t (+96%)",report#21881,2009
+FL-01637,467,yoy_anomaly,low,documented,"filed scope1 104,000 → 2,711,000 t (+2507%)",report#21880,2010
 FL-01497,467,yoy_anomaly,low,documented,"filed scope1 104,000 → 2,969,000 t (+2755%)",report#21879,2010
+FL-01638,467,yoy_anomaly,low,documented,"filed scope1 2,512,000 → 259,000 t (+90%)",report#21880,2010
 FL-01498,467,yoy_anomaly,low,documented,"filed scope1 2,710,000 → 4 t (+100%)",report#21879,2010
+FL-01639,467,yoy_anomaly,low,documented,"filed scope1 259,000 → 2,969,000 t (+1046%)",report#21879,2010
 FL-01500,467,yoy_anomaly,low,documented,"filed scope1 2,655,000 → 299,000 t (+89%)",report#21879,2011
 FL-01510,467,yoy_anomaly,low,documented,"filed scope1 299,000 → 3,018,000 t (+909%)",report#21878,2011
 FL-01499,467,yoy_anomaly,low,documented,"filed scope1 4 → 2,655,000 t (+60340809%)",report#21879,2011
@@ -272,6 +290,15 @@ FL-01527,599,yoy_anomaly,low,documented,"filed scope1 2,000,000 → 7 t (+100%)"
 FL-01528,599,yoy_anomaly,low,documented,filed scope1 7 → 11 t (+63%),report#21912,2020
 FL-01507,599,yoy_anomaly,low,documented,"filed scope1 2,000,000 → 8 t (+100%)",report#21911,2021
 FL-00058,613,disclosure_gap,medium,reported,"4 facilities w/ Σ73,015 t ground-truth emissions but no filed scope-1 disclosure",,2023
+FL-01569,619,yoy_anomaly,low,documented,"filed scope1 2 → 23,000,000 t (+1149999900%)",report#10850,2020
+FL-01572,619,yoy_anomaly,low,documented,filed scope1 16 → 7 t (+54%),report#10850,2023
+FL-01571,619,yoy_anomaly,low,documented,filed scope1 2 → 16 t (+680%),report#10850,2023
+FL-01570,619,yoy_anomaly,low,documented,"filed scope1 23,000,000 → 2 t (+100%)",report#10850,2023
+FL-01573,619,yoy_anomaly,low,documented,"filed scope1 7 → 2,000,000 t (+28168914%)",report#10850,2023
+FL-01574,674,yoy_anomaly,low,documented,filed scope1 37 → 2 t (+95%),report#4555,2019
+FL-01575,674,yoy_anomaly,low,documented,"filed scope1 1 → 1,434,000 t (+143399900%)",report#4555,2021
+FL-01576,674,yoy_anomaly,low,documented,"filed scope1 1,434,000 → 2 t (+100%)",report#4555,2022
+FL-01577,674,yoy_anomaly,low,documented,"filed scope1 2 → 1,433,816 t (+71690680%)",report#4555,2022
 FL-00942,689,yoy_anomaly,low,documented,filed scope1 28 → 2 t (+93%),report#22071,2021
 FL-00941,689,yoy_anomaly,low,documented,filed scope1 3 → 28 t (+833%),report#22072,2021
 FL-00943,689,yoy_anomaly,low,documented,filed scope1 2 → 27 t (+1250%),report#22071,2022
@@ -285,6 +312,7 @@ FL-00951,808,yoy_anomaly,low,documented,"filed scope1 16 → 252,000 t (+1574900
 FL-00950,808,yoy_anomaly,low,documented,"filed scope1 325,000 → 16 t (+100%)",report#21167,2008
 FL-00952,808,yoy_anomaly,low,documented,"filed scope1 252,000 → 51 t (+100%)",report#21152,2010
 FL-00953,808,yoy_anomaly,low,documented,filed scope1 46 → 8 t (+83%),report#21152,2022
+FL-01640,836,yoy_anomaly,low,documented,"filed scope1 1 → 35,276 t (+3527500%)",report#22124,2020
 FL-00116,928,disclosure_gap,medium,reported,"2 facilities w/ Σ3,300,100 t ground-truth emissions but no filed scope-1 disclosure",,2023
 FL-00956,928,yoy_anomaly,low,documented,filed scope1 14 → 24 t (+71%),report#15708,2018
 FL-00955,928,yoy_anomaly,low,documented,"filed scope1 2,018 → 14 t (+99%)",report#15708,2018
@@ -301,6 +329,17 @@ FL-00964,959,yoy_anomaly,low,documented,filed scope1 2 → 589 t (+29350%),repor
 FL-00963,959,yoy_anomaly,low,documented,filed scope1 30 → 2 t (+93%),report#13459,2023
 FL-00965,959,yoy_anomaly,low,documented,filed scope1 589 → 30 t (+95%),report#13459,2023
 FL-00962,959,yoy_anomaly,low,documented,"filed scope1 639,033 → 30 t (+100%)",report#13459,2023
+FL-01543,1024,yoy_anomaly,low,documented,"filed scope1 1 → 2,000,000 t (+199999900%)",report#22052,2021
+FL-01541,1024,yoy_anomaly,low,documented,"filed scope1 1 → 2,109,383 t (+210938200%)",report#22052,2021
+FL-01547,1024,yoy_anomaly,low,documented,filed scope1 1 → 6 t (+343%),report#22051,2021
+FL-01542,1024,yoy_anomaly,low,documented,"filed scope1 1,811,304 → 1 t (+100%)",report#22052,2021
+FL-01550,1024,yoy_anomaly,low,documented,"filed scope1 1,816,152,000,000 → 1 t (+100%)",report#22051,2021
+FL-01549,1024,yoy_anomaly,low,documented,"filed scope1 2 → 1,816,152,000,000 t (+72646079999900%)",report#22051,2021
+FL-01540,1024,yoy_anomaly,low,documented,"filed scope1 2,000,000 → 1 t (+100%)",report#22052,2021
+FL-01544,1024,yoy_anomaly,low,documented,"filed scope1 2,000,000 → 2 t (+100%)",report#22052,2021
+FL-01546,1024,yoy_anomaly,low,documented,filed scope1 20 → 1 t (+95%),report#22051,2021
+FL-01545,1024,yoy_anomaly,low,documented,filed scope1 3 → 20 t (+669%),report#22051,2021
+FL-01548,1024,yoy_anomaly,low,documented,"filed scope1 6 → 2,000,000 t (+32257965%)",report#22051,2021
 FL-00967,1029,yoy_anomaly,low,documented,"filed scope1 1,348,577 → 1 t (+100%)",report#14589,2018
 FL-00966,1029,yoy_anomaly,low,documented,"filed scope1 2 → 1,348,577 t (+67428750%)",report#14589,2018
 FL-00968,1029,yoy_anomaly,low,documented,"filed scope1 1 → 2,030 t (+202900%)",report#14589,2020
@@ -311,15 +350,25 @@ FL-00121,1136,disclosure_gap,medium,reported,"1 facilities w/ Σ135,743 t ground
 FL-00122,1150,disclosure_gap,medium,reported,"2 facilities w/ Σ1,397,439 t ground-truth emissions but no filed scope-1 disclosure",,2023
 FL-00972,1150,reported_divergence,medium,documented,"filed scope1 799,008 t vs Σfacility 1,397,439 t (-43%)",report#12650,2023
 FL-00973,1150,yoy_anomaly,low,documented,"filed scope1 799,008 → 1 t (+100%)",report#12650,2022
+FL-01551,1163,disclosure_gap,medium,reported,"1 facilities w/ Σ39,079 t ground-truth emissions but no filed scope-1 disclosure",,2023
 FL-00123,1193,disclosure_gap,medium,reported,"1 facilities w/ Σ13,396 t ground-truth emissions but no filed scope-1 disclosure",,2023
 FL-00124,1224,disclosure_gap,medium,reported,"1 facilities w/ Σ91,370 t ground-truth emissions but no filed scope-1 disclosure",,2023
 FL-00125,1253,disclosure_gap,medium,reported,"1 facilities w/ Σ171,421 t ground-truth emissions but no filed scope-1 disclosure",,2023
+FL-01552,1258,disclosure_gap,medium,reported,"2 facilities w/ Σ2,160,385 t ground-truth emissions but no filed scope-1 disclosure",,2023
 FL-00126,1269,disclosure_gap,medium,reported,"3 facilities w/ Σ1,075,601 t ground-truth emissions but no filed scope-1 disclosure",,2023
 FL-00977,1269,yoy_anomaly,low,documented,filed scope1 1 → 29 t (+2317%),report#14317,2022
 FL-00974,1269,yoy_anomaly,low,documented,filed scope1 2 → 29 t (+1350%),report#14317,2022
 FL-00975,1269,yoy_anomaly,low,documented,filed scope1 29 → 3 t (+89%),report#14317,2022
 FL-00976,1269,yoy_anomaly,low,documented,filed scope1 3 → 1 t (+62%),report#14317,2022
 FL-00127,1286,disclosure_gap,medium,reported,"1 facilities w/ Σ25,645 t ground-truth emissions but no filed scope-1 disclosure",,2023
+FL-01643,1355,yoy_anomaly,low,documented,"filed scope1 112,000,000 → 29 t (+100%)",report#23748,2023
+FL-01646,1355,yoy_anomaly,low,documented,"filed scope1 2 → 2,000,000 t (+99999900%)",report#23748,2023
+FL-01647,1355,yoy_anomaly,low,documented,"filed scope1 2,000,000 → 90 t (+100%)",report#23748,2023
+FL-01644,1355,yoy_anomaly,low,documented,filed scope1 29 → 90 t (+210%),report#23748,2023
+FL-01641,1355,yoy_anomaly,low,documented,"filed scope1 38,000,000 → 90 t (+100%)",report#23748,2023
+FL-01645,1355,yoy_anomaly,low,documented,filed scope1 81 → 2 t (+98%),report#23748,2023
+FL-01642,1355,yoy_anomaly,low,documented,"filed scope1 90 → 112,000,000 t (+124444344%)",report#23748,2023
+FL-01648,1355,yoy_anomaly,low,documented,filed scope1 90 → 38 t (+58%),report#23748,2026
 FL-00128,1375,disclosure_gap,medium,reported,"1 facilities w/ Σ381,322 t ground-truth emissions but no filed scope-1 disclosure",,2023
 FL-00129,1387,disclosure_gap,medium,reported,"3 facilities w/ Σ166,339 t ground-truth emissions but no filed scope-1 disclosure",,2023
 FL-00130,1422,disclosure_gap,medium,reported,"7 facilities w/ Σ5,620,708 t ground-truth emissions but no filed scope-1 disclosure",,2023
@@ -349,6 +398,8 @@ FL-00997,1623,yoy_anomaly,low,documented,"filed scope1 2 → 6,039,288 t (+30196
 FL-00996,1623,yoy_anomaly,low,documented,filed scope1 99 → 2 t (+98%),report#16101,2021
 FL-00138,1652,disclosure_gap,medium,reported,"1 facilities w/ Σ407,450 t ground-truth emissions but no filed scope-1 disclosure",,2023
 FL-00998,1652,yoy_anomaly,low,documented,"filed scope1 632,413 → 2 t (+100%)",report#14180,2022
+FL-01649,1664,yoy_anomaly,low,documented,"filed scope1 1 → 2,000,000 t (+199999900%)",report#23773,2022
+FL-01650,1664,yoy_anomaly,low,documented,"filed scope1 2,000,000 → 717 t (+100%)",report#23773,2022
 FL-00139,1667,disclosure_gap,medium,reported,"5 facilities w/ Σ38,089 t ground-truth emissions but no filed scope-1 disclosure",,2023
 FL-01000,1667,yoy_anomaly,low,documented,"filed scope1 15,471 → 74,859 t (+384%)",report#14121,2018
 FL-00999,1667,yoy_anomaly,low,documented,"filed scope1 2,000 → 15,471 t (+674%)",report#14121,2018
@@ -387,6 +438,7 @@ FL-01032,2181,yoy_anomaly,low,documented,"filed scope1 2,020 → 7 t (+100%)",re
 FL-01033,2181,yoy_anomaly,low,documented,"filed scope1 7 → 4,000,000 t (+61443832%)",report#22059,2020
 FL-01035,2181,yoy_anomaly,low,documented,filed scope1 1 → 20 t (+1900%),report#22058,2021
 FL-01034,2181,yoy_anomaly,low,documented,"filed scope1 4,000,000 → 1 t (+100%)",report#22058,2021
+FL-01553,2181,yoy_anomaly,low,documented,filed scope1 20 → 1 t (+95%),report#22056,2023
 FL-00145,2449,disclosure_gap,medium,reported,"1 facilities w/ Σ5,825 t ground-truth emissions but no filed scope-1 disclosure",,2023
 FL-01036,2535,yoy_anomaly,low,documented,"filed scope1 2 → 2,970 t (+148400%)",report#21299,2019
 FL-01037,2535,yoy_anomaly,low,documented,"filed scope1 2,970 → 2 t (+100%)",report#21299,2025
@@ -396,6 +448,10 @@ FL-01039,2753,reported_divergence,medium,documented,"filed scope1 2 t vs Σfacil
 FL-00147,2773,disclosure_gap,medium,reported,"2 facilities w/ Σ61,208 t ground-truth emissions but no filed scope-1 disclosure",,2023
 FL-01041,2773,yoy_anomaly,low,documented,"filed scope1 315,000 → 1 t (+100%)",report#13934,2016
 FL-01042,2773,yoy_anomaly,low,documented,"filed scope1 1 → 652,000 t (+65199900%)",report#13934,2023
+FL-01578,2806,yoy_anomaly,low,documented,filed scope1 13 → 2 t (+85%),report#11577,2022
+FL-01581,2806,yoy_anomaly,low,documented,filed scope1 2 → 305 t (+15150%),report#11577,2022
+FL-01580,2806,yoy_anomaly,low,documented,"filed scope1 2,566,943 → 2 t (+100%)",report#11577,2022
+FL-01579,2806,yoy_anomaly,low,documented,"filed scope1 3 → 2,566,943 t (+85564667%)",report#11577,2022
 FL-00149,2906,disclosure_gap,medium,reported,"3 facilities w/ Σ1,573,061 t ground-truth emissions but no filed scope-1 disclosure",,2023
 FL-01045,3039,yoy_anomaly,low,documented,"filed scope1 11 → 121,738 t (+1106609%)",report#20600,2020
 FL-01043,3039,yoy_anomaly,low,documented,filed scope1 2 → 23 t (+1050%),report#20600,2020
@@ -405,13 +461,19 @@ FL-00151,3136,disclosure_gap,medium,reported,"1 facilities w/ Σ22,223 t ground-
 FL-01046,3136,yoy_anomaly,low,documented,"filed scope1 110 → 16,417 t (+14825%)",report#17977,2019
 FL-01047,3136,yoy_anomaly,low,documented,"filed scope1 16,417 → 128,847 t (+685%)",report#17977,2022
 FL-01048,3136,yoy_anomaly,low,documented,"filed scope1 85,000 → 2 t (+100%)",report#17977,2022
+FL-01582,3148,yoy_anomaly,low,documented,"filed scope1 2 → 1,836,272 t (+91813500%)",report#11698,2017
+FL-01583,3148,yoy_anomaly,low,documented,"filed scope1 1,836,272 → 2 t (+100%)",report#11698,2020
+FL-01584,3148,yoy_anomaly,low,documented,"filed scope1 2 → 2,030 t (+101400%)",report#11698,2023
+FL-01585,3148,yoy_anomaly,low,documented,"filed scope1 2,030 → 3 t (+100%)",report#11698,2023
 FL-00153,3702,disclosure_gap,medium,reported,"3 facilities w/ Σ80,612 t ground-truth emissions but no filed scope-1 disclosure",,2023
 FL-01050,3702,yoy_anomaly,low,documented,filed scope1 593 → 66 t (+89%),report#16364,2021
 FL-01051,3702,yoy_anomaly,low,documented,"filed scope1 66 → 593,392 t (+898979%)",report#16364,2023
 FL-01052,3702,yoy_anomaly,low,documented,"filed scope1 593,392 → 110 t (+100%)",report#16364,2024
 FL-00154,5842,disclosure_gap,medium,reported,"3 facilities w/ Σ73,972 t ground-truth emissions but no filed scope-1 disclosure",,2023
+FL-01586,6733,yoy_anomaly,low,documented,"filed scope1 1,000,000 → 1,000 t (+100%)",report#5825,2023
 FL-00157,7267,disclosure_gap,medium,reported,"7 facilities w/ Σ291,330 t ground-truth emissions but no filed scope-1 disclosure",,2023
 FL-00159,7450,disclosure_gap,medium,reported,"2 facilities w/ Σ1,863,858 t ground-truth emissions but no filed scope-1 disclosure",,2023
+FL-01587,7483,yoy_anomaly,low,documented,"filed scope1 10,000 → 2 t (+100%)",report#9801,2024
 FL-00160,7490,disclosure_gap,medium,reported,"22 facilities w/ Σ3,108,324 t ground-truth emissions but no filed scope-1 disclosure",,2023
 FL-00475,7490,reported_divergence,medium,documented,"filed scope1 2 t vs Σfacility 3,108,324 t (-100%)",report#18012,2023
 FL-00161,7508,disclosure_gap,medium,reported,"29 facilities w/ Σ5,088,659 t ground-truth emissions but no filed scope-1 disclosure",,2023
@@ -449,11 +511,19 @@ FL-01085,7646,yoy_anomaly,low,documented,filed scope1 1 → 3 t (+200%),report#1
 FL-01087,7646,yoy_anomaly,low,documented,"filed scope1 1,000 → 2 t (+100%)",report#18307,2023
 FL-01086,7646,yoy_anomaly,low,documented,"filed scope1 3 → 1,000 t (+33233%)",report#18307,2023
 FL-01088,7646,yoy_anomaly,low,documented,"filed scope1 2 → 2,000 t (+99900%)",report#18130,2025
+FL-01588,7649,yoy_anomaly,low,documented,filed scope1 1 → 2 t (+100%),report#5377,2022
+FL-01589,7649,yoy_anomaly,low,documented,filed scope1 2 → 8 t (+325%),report#5377,2022
+FL-01591,7649,yoy_anomaly,low,documented,"filed scope1 4,300 → 7 t (+100%)",report#5377,2023
+FL-01592,7649,yoy_anomaly,low,documented,filed scope1 7 → 3 t (+58%),report#5377,2023
+FL-01590,7649,yoy_anomaly,low,documented,"filed scope1 8 → 4,300 t (+50488%)",report#5377,2023
 FL-00164,7657,disclosure_gap,medium,reported,"5 facilities w/ Σ7,993,676 t ground-truth emissions but no filed scope-1 disclosure",,2023
 FL-01091,7660,yoy_anomaly,low,documented,"filed scope1 2,022 → 7 t (+100%)",report#15077,2022
 FL-00165,7662,disclosure_gap,medium,reported,"2 facilities w/ Σ47,370 t ground-truth emissions but no filed scope-1 disclosure",,2023
 FL-00166,7683,disclosure_gap,medium,reported,"17 facilities w/ Σ12,816,237 t ground-truth emissions but no filed scope-1 disclosure",,2023
 FL-00167,8032,disclosure_gap,medium,reported,"19 facilities w/ Σ39,281,462 t ground-truth emissions but no filed scope-1 disclosure",,2023
+FL-01593,8164,yoy_anomaly,low,documented,filed scope1 2 → 8 t (+300%),report#3337,2023
+FL-01594,8164,yoy_anomaly,low,documented,"filed scope1 8 → 43,323 t (+541438%)",report#3337,2023
+FL-01595,8164,yoy_anomaly,low,documented,"filed scope1 43,323 → 5,638 t (+87%)",report#3337,2024
 FL-01097,8399,yoy_anomaly,low,documented,"filed scope1 107,726 → 2 t (+100%)",report#13545,2023
 FL-01099,8399,yoy_anomaly,low,documented,"filed scope1 14,447 → 2,023 t (+86%)",report#13545,2023
 FL-01098,8399,yoy_anomaly,low,documented,"filed scope1 2 → 14,447 t (+722250%)",report#13545,2023
@@ -473,11 +543,18 @@ FL-01109,8448,yoy_anomaly,low,documented,"filed scope1 2 → 2,045 t (+102155%)"
 FL-00170,8541,disclosure_gap,medium,reported,"16 facilities w/ Σ11,255,022 t ground-truth emissions but no filed scope-1 disclosure",,2023
 FL-00171,8569,disclosure_gap,medium,reported,"1 facilities w/ Σ45,795 t ground-truth emissions but no filed scope-1 disclosure",,2023
 FL-01110,8569,reported_divergence,medium,documented,"filed scope1 5 t vs Σfacility 45,795 t (-100%)",report#15875,2023
+FL-01554,8721,yoy_anomaly,low,documented,"filed scope1 2 → 40,150 t (+2007400%)",report#22007,2022
+FL-01557,8721,yoy_anomaly,low,documented,"filed scope1 223,821 → 3 t (+100%)",report#22007,2022
+FL-01556,8721,yoy_anomaly,low,documented,"filed scope1 223,821 → 40,150 t (+82%)",report#22007,2022
+FL-01555,8721,yoy_anomaly,low,documented,"filed scope1 40,150 → 223,821 t (+457%)",report#22007,2022
 FL-01111,8815,yoy_anomaly,low,documented,"filed scope1 2 → 2,000,000 t (+99999900%)",report#18218,2021
 FL-01112,8815,yoy_anomaly,low,documented,"filed scope1 2,000,000 → 348 t (+100%)",report#18218,2021
 FL-01113,8815,yoy_anomaly,low,documented,"filed scope1 348 → 1,675 t (+381%)",report#18218,2021
 FL-01114,8815,yoy_anomaly,low,documented,"filed scope1 1,675 → 79 t (+95%)",report#18218,2023
 FL-00175,9502,disclosure_gap,medium,reported,"11 facilities w/ Σ1,134,385 t ground-truth emissions but no filed scope-1 disclosure",,2023
+FL-01598,9607,yoy_anomaly,low,documented,"filed scope1 14,206 → 1 t (+100%)",report#1776,2022
+FL-01596,9607,yoy_anomaly,low,documented,"filed scope1 2 → 7,500,000,000 t (+374999999900%)",report#1776,2022
+FL-01597,9607,yoy_anomaly,low,documented,"filed scope1 7,500,000,000 → 14,206 t (+100%)",report#1776,2022
 FL-00176,9613,disclosure_gap,medium,reported,"16 facilities w/ Σ25,354,875 t ground-truth emissions but no filed scope-1 disclosure",,2023
 FL-01117,9613,reported_divergence,medium,documented,"filed scope1 31 t vs Σfacility 25,354,875 t (-100%)",report#13664,2023
 FL-01118,9613,yoy_anomaly,low,documented,"filed scope1 33 → 33,700,000 t (+102743802%)",report#17997,2024
@@ -488,6 +565,10 @@ FL-01522,9998,yoy_anomaly,low,documented,filed scope1 32 → 99 t (+209%),report
 FL-01525,9998,yoy_anomaly,low,documented,"filed scope1 550,138 → 1,671,716 t (+204%)",report#21823,2021
 FL-01524,9998,yoy_anomaly,low,documented,"filed scope1 8,857 → 550,138 t (+6111%)",report#21823,2021
 FL-01523,9998,yoy_anomaly,low,documented,"filed scope1 97 → 8,857 t (+9031%)",report#21823,2021
+FL-01558,10153,yoy_anomaly,low,documented,"filed scope1 3 → 36,249 t (+1208200%)",report#21948,2022
+FL-01559,10153,yoy_anomaly,low,documented,"filed scope1 36,249 → 2 t (+100%)",report#21948,2022
+FL-01560,10153,yoy_anomaly,low,documented,"filed scope1 2 → 2,098 t (+104800%)",report#21948,2023
+FL-01561,10153,yoy_anomaly,low,documented,"filed scope1 2,023 → 100 t (+95%)",report#21948,2024
 FL-00180,10169,disclosure_gap,medium,reported,"5 facilities w/ Σ31,527 t ground-truth emissions but no filed scope-1 disclosure",,2023
 FL-01119,10169,yoy_anomaly,low,documented,"filed scope1 111,895 → 618,332 t (+453%)",report#14611,2020
 FL-01121,10169,yoy_anomaly,low,documented,"filed scope1 274,133 → 111,895 t (+59%)",report#14611,2022
@@ -724,6 +805,8 @@ FL-00597,10850,yoy_anomaly,low,documented,filed scope1 21 → 2 t (+90%),report#
 FL-00598,10857,yoy_anomaly,low,documented,"filed scope1 1 → 2,022 t (+202100%)",report#2422,2022
 FL-00600,10861,yoy_anomaly,low,documented,"filed scope1 2,030 → 11 t (+99%)",report#2433,2029
 FL-00599,10861,yoy_anomaly,low,documented,"filed scope1 5 → 2,030 t (+40500%)",report#2433,2029
+FL-01600,10862,yoy_anomaly,low,documented,"filed scope1 2,030 → 11 t (+99%)",report#2433,2029
+FL-01599,10862,yoy_anomaly,low,documented,"filed scope1 5 → 2,030 t (+40500%)",report#2433,2029
 FL-00601,10863,yoy_anomaly,low,documented,"filed scope1 6 → 116,435 t (+1973375%)",report#2442,2022
 FL-00602,10879,yoy_anomaly,low,documented,filed scope1 110 → 22 t (+80%),report#2455,2021
 FL-00603,10879,yoy_anomaly,low,documented,filed scope1 22 → 6 t (+73%),report#2455,2021
@@ -845,6 +928,9 @@ FL-01238,11206,yoy_anomaly,low,documented,"filed scope1 2 → 1,433,816 t (+7169
 FL-00308,11213,yoy_anomaly,low,documented,"filed scope1 29,561 → 9 t (+100%)",report#1618,2023
 FL-00309,11229,disclosure_gap,medium,reported,"5 facilities w/ Σ10,157,817 t ground-truth emissions but no filed scope-1 disclosure",,2023
 FL-01239,11233,yoy_anomaly,low,documented,"filed scope1 466,000 → 2,050 t (+100%)",report#2764,2022
+FL-01601,11248,yoy_anomaly,low,documented,filed scope1 2 → 6 t (+215%),report#7102,2023
+FL-01602,11248,yoy_anomaly,low,documented,filed scope1 6 → 1 t (+84%),report#7102,2023
+FL-01603,11248,yoy_anomaly,low,documented,filed scope1 1 → 2 t (+100%),report#7102,2025
 FL-00640,11253,yoy_anomaly,low,documented,"filed scope1 2 → 86,217 t (+4310750%)",report#3545,2021
 FL-00641,11253,yoy_anomaly,low,documented,"filed scope1 86,217 → 3 t (+100%)",report#3545,2022
 FL-00642,11253,yoy_anomaly,low,documented,"filed scope1 3 → 2,023 t (+67333%)",report#3545,2023
@@ -875,6 +961,7 @@ FL-01254,11346,yoy_anomaly,low,documented,filed scope1 488 → 3 t (+99%),report
 FL-01255,11346,yoy_anomaly,low,documented,filed scope1 3 → 5 t (+67%),report#9860,2024
 FL-00320,11371,disclosure_gap,medium,reported,"3 facilities w/ Σ3,002,752 t ground-truth emissions but no filed scope-1 disclosure",,2023
 FL-00321,11387,yoy_anomaly,low,documented,"filed scope1 297,936 → 485,673 t (+63%)",report#1652,2023
+FL-01652,11391,yoy_anomaly,low,documented,"filed scope1 4 → 980,000 t (+24499900%)",report#7194,2022
 FL-01262,11391,yoy_anomaly,low,documented,"filed scope1 980,000 → 4 t (+100%)",report#7194,2022
 FL-01263,11392,yoy_anomaly,low,documented,"filed scope1 65,000 → 476,000 t (+632%)",report#9654,2022
 FL-00324,11407,disclosure_gap,medium,reported,"1 facilities w/ Σ3,653,564 t ground-truth emissions but no filed scope-1 disclosure",,2023
@@ -922,6 +1009,10 @@ FL-00345,11585,disclosure_gap,medium,reported,"2 facilities w/ Σ1,349,894 t gro
 FL-01310,11589,yoy_anomaly,low,documented,"filed scope1 2 → 1,057,126 t (+52856200%)",report#3039,2022
 FL-00648,11596,yoy_anomaly,low,documented,filed scope1 1 → 2 t (+100%),report#3620,2023
 FL-00647,11596,yoy_anomaly,low,documented,"filed scope1 35,855 → 1 t (+100%)",report#3620,2023
+FL-01604,11599,yoy_anomaly,low,documented,"filed scope1 3 → 9,095 t (+303067%)",report#3835,2013
+FL-01605,11599,yoy_anomaly,low,documented,"filed scope1 9,095 → 3 t (+100%)",report#3835,2018
+FL-01606,11599,yoy_anomaly,low,documented,filed scope1 3 → 1 t (+67%),report#3835,2021
+FL-01607,11599,yoy_anomaly,low,documented,filed scope1 1 → 2 t (+100%),report#3835,2022
 FL-00347,11605,disclosure_gap,medium,reported,"1 facilities w/ Σ30,976 t ground-truth emissions but no filed scope-1 disclosure",,2023
 FL-01314,11605,reported_divergence,medium,documented,"filed scope1 2,019 t vs Σfacility 30,976 t (-93%)",report#10938,2023
 FL-01315,11605,yoy_anomaly,low,documented,"filed scope1 3 → 2,019 t (+67200%)",report#10938,2019
@@ -964,6 +1055,7 @@ FL-00358,11815,yoy_anomaly,low,documented,"filed scope1 1,414,344 → 60,062 t (
 FL-00357,11815,yoy_anomaly,low,documented,"filed scope1 60,062 → 1,414,344 t (+2255%)",report#1475,2022
 FL-00359,11824,disclosure_gap,medium,reported,"1 facilities w/ Σ29,496 t ground-truth emissions but no filed scope-1 disclosure",,2023
 FL-01332,11824,reported_divergence,medium,documented,"filed scope1 2,000 t vs Σfacility 29,496 t (-93%)",report#5141,2023
+FL-01653,11832,yoy_anomaly,low,documented,filed scope1 7 → 389 t (+5457%),report#23758,2021
 FL-00361,11847,disclosure_gap,medium,reported,"1 facilities w/ Σ507,459 t ground-truth emissions but no filed scope-1 disclosure",,2023
 FL-00363,11860,yoy_anomaly,low,documented,filed scope1 15 → 2 t (+87%),report#1479,2022
 FL-00364,11860,yoy_anomaly,low,documented,filed scope1 2 → 15 t (+650%),report#1479,2022
@@ -1005,6 +1097,7 @@ FL-00373,12022,disclosure_gap,medium,reported,"1 facilities w/ Σ862,903 t groun
 FL-01373,12022,yoy_anomaly,low,documented,filed scope1 2 → 970 t (+48400%),report#5275,2022
 FL-01375,12022,yoy_anomaly,low,documented,"filed scope1 31,496 → 1 t (+100%)",report#5275,2022
 FL-01374,12022,yoy_anomaly,low,documented,"filed scope1 970 → 31,496 t (+3147%)",report#5275,2022
+FL-01654,12027,yoy_anomaly,low,documented,filed scope1 2 → 8 t (+300%),report#22205,2022
 FL-00663,12032,yoy_anomaly,low,documented,filed scope1 10 → 4 t (+60%),report#3742,2018
 FL-00665,12032,yoy_anomaly,low,documented,filed scope1 11 → 2 t (+82%),report#3742,2020
 FL-00664,12032,yoy_anomaly,low,documented,filed scope1 2 → 11 t (+450%),report#3742,2020
@@ -1039,6 +1132,11 @@ FL-00387,12121,yoy_anomaly,low,documented,"filed scope1 1 → 1,145,687 t (+1145
 FL-00385,12121,yoy_anomaly,low,documented,"filed scope1 1,145,687 → 49 t (+100%)",report#1494,2020
 FL-00386,12121,yoy_anomaly,low,documented,filed scope1 49 → 1 t (+98%),report#1494,2020
 FL-00388,12140,disclosure_gap,medium,reported,"1 facilities w/ Σ91,685 t ground-truth emissions but no filed scope-1 disclosure",,2023
+FL-01655,12143,yoy_anomaly,low,documented,filed scope1 2 → 1 t (+55%),report#22193,2020
+FL-01656,12143,yoy_anomaly,low,documented,filed scope1 1 → 2 t (+100%),report#22193,2022
+FL-01657,12143,yoy_anomaly,low,documented,filed scope1 2 → 22 t (+1000%),report#22193,2023
+FL-01658,12143,yoy_anomaly,low,documented,filed scope1 22 → 590 t (+2582%),report#22193,2023
+FL-01659,12143,yoy_anomaly,low,documented,filed scope1 590 → 1 t (+100%),report#22193,2023
 FL-00389,12162,yoy_anomaly,low,documented,filed scope1 1 → 2 t (+100%),report#1389,2020
 FL-00390,12166,yoy_anomaly,low,documented,filed scope1 1 → 3 t (+200%),report#1592,2022
 FL-00393,12177,yoy_anomaly,low,documented,"filed scope1 2,023 → 50 t (+98%)",report#1390,2023
@@ -1084,6 +1182,9 @@ FL-00408,12246,yoy_anomaly,low,documented,filed scope1 2 → 0 t (+96%),report#1
 FL-00410,12249,disclosure_gap,medium,reported,"3 facilities w/ Σ202,040 t ground-truth emissions but no filed scope-1 disclosure",,2023
 FL-00411,12268,yoy_anomaly,low,documented,"filed scope1 2,018 → 9 t (+100%)",report#1502,2021
 FL-01411,12282,yoy_anomaly,low,documented,filed scope1 100 → 23 t (+77%),report#10242,2021
+FL-01609,12290,yoy_anomaly,low,documented,"filed scope1 1,600,000 → 2,000 t (+100%)",report#9879,2022
+FL-01608,12290,yoy_anomaly,low,documented,"filed scope1 2,021 → 1,600,000 t (+79069%)",report#9879,2022
+FL-01610,12290,yoy_anomaly,low,documented,"filed scope1 2,000 → 2 t (+100%)",report#9879,2024
 FL-00414,12296,disclosure_gap,medium,reported,"6 facilities w/ Σ1,763,070 t ground-truth emissions but no filed scope-1 disclosure",,2023
 FL-01412,12296,reported_divergence,medium,documented,"filed scope1 1,000,000 t vs Σfacility 1,763,070 t (-43%)",report#4045,2023
 FL-00415,12322,disclosure_gap,medium,reported,"1 facilities w/ Σ104,763 t ground-truth emissions but no filed scope-1 disclosure",,2023
@@ -1094,6 +1195,7 @@ FL-00416,12336,yoy_anomaly,low,documented,filed scope1 2 → 50 t (+2400%),repor
 FL-00417,12336,yoy_anomaly,low,documented,filed scope1 50 → 2 t (+96%),report#1503,2023
 FL-00418,12336,yoy_anomaly,low,documented,filed scope1 2 → 80 t (+3900%),report#1503,2024
 FL-00677,12338,yoy_anomaly,low,documented,"filed scope1 362,532 → 1 t (+100%)",report#3647,2021
+FL-01660,12348,yoy_anomaly,low,documented,"filed scope1 2 → 2,030 t (+101400%)",report#22319,2022
 FL-00678,12353,yoy_anomaly,low,documented,"filed scope1 2 → 241,503 t (+12075050%)",report#3648,2019
 FL-00679,12353,yoy_anomaly,low,documented,"filed scope1 241,503 → 100 t (+100%)",report#3648,2019
 FL-00680,12353,yoy_anomaly,low,documented,"filed scope1 100 → 2,022 t (+1922%)",report#3648,2022
@@ -1107,6 +1209,10 @@ FL-00685,12353,yoy_anomaly,low,documented,"filed scope1 200,000 → 5,000 t (+98
 FL-00682,12353,yoy_anomaly,low,documented,"filed scope1 4,708 → 179,447 t (+3712%)",report#3648,2023
 FL-00686,12353,yoy_anomaly,low,documented,"filed scope1 5,000 → 200,000 t (+3900%)",report#3648,2023
 FL-00419,12365,disclosure_gap,medium,reported,"1 facilities w/ Σ249,084 t ground-truth emissions but no filed scope-1 disclosure",,2023
+FL-01662,12369,yoy_anomaly,low,documented,"filed scope1 1 → 1,000 t (+99900%)",report#22328,2021
+FL-01661,12369,yoy_anomaly,low,documented,"filed scope1 1,000 → 1 t (+100%)",report#22328,2021
+FL-01663,12369,yoy_anomaly,low,documented,"filed scope1 1,000 → 2 t (+100%)",report#22328,2021
+FL-01664,12369,yoy_anomaly,low,documented,"filed scope1 2 → 1,000 t (+49900%)",report#22328,2022
 FL-01416,12392,yoy_anomaly,low,documented,filed scope1 50 → 1 t (+98%),report#11739,2015
 FL-01417,12392,yoy_anomaly,low,documented,filed scope1 1 → 15 t (+1400%),report#11739,2022
 FL-01418,12392,yoy_anomaly,low,documented,filed scope1 15 → 7 t (+53%),report#11739,2023
@@ -1166,6 +1272,7 @@ FL-01443,12523,yoy_anomaly,low,documented,filed scope1 3 → 1 t (+67%),report#5
 FL-01444,12532,yoy_anomaly,low,documented,"filed scope1 2,019 → 1 t (+100%)",report#7959,2019
 FL-01445,12532,yoy_anomaly,low,documented,"filed scope1 1 → 2,023 t (+202200%)",report#7959,2023
 FL-01446,12532,yoy_anomaly,low,documented,"filed scope1 2,023 → 2 t (+100%)",report#7959,2023
+FL-01665,12534,yoy_anomaly,low,documented,filed scope1 5 → 1 t (+80%),report#23815,2022
 FL-01447,12540,yoy_anomaly,low,documented,filed scope1 19 → 97 t (+411%),report#8006,2023
 FL-01448,12540,yoy_anomaly,low,documented,filed scope1 30 → 50 t (+67%),report#8006,2025
 FL-01449,12545,yoy_anomaly,low,documented,"filed scope1 260 → 2,021 t (+676%)",report#10217,2021
@@ -1266,3 +1373,21 @@ FL-00471,12776,yoy_anomaly,low,documented,"filed scope1 22 → 2,023 t (+9095%)"
 FL-00470,12776,yoy_anomaly,low,documented,filed scope1 87 → 22 t (+75%),report#1521,2023
 FL-00473,12776,yoy_anomaly,low,documented,"filed scope1 946,888 → 87 t (+100%)",report#1521,2023
 FL-00474,12788,disclosure_gap,medium,reported,"22 facilities w/ Σ2,960,403 t ground-truth emissions but no filed scope-1 disclosure",,2023
+FL-01611,12825,yoy_anomaly,low,documented,filed scope1 3 → 1 t (+67%),report#5961,2022
+FL-01537,13352,disclosure_gap,medium,reported,"1 facilities w/ Σ601,910 t ground-truth emissions but no filed scope-1 disclosure",,2023
+FL-01563,13948,disclosure_gap,medium,reported,"2 facilities w/ Σ2,126,270 t ground-truth emissions but no filed scope-1 disclosure",,2023
+FL-01612,14007,yoy_anomaly,low,documented,filed scope1 95 → 13 t (+86%),report#6418,2020
+FL-01613,14007,yoy_anomaly,low,documented,filed scope1 13 → 1 t (+92%),report#6418,2024
+FL-01614,14007,yoy_anomaly,low,documented,filed scope1 1 → 2 t (+100%),report#6418,2025
+FL-01615,14007,yoy_anomaly,low,documented,"filed scope1 2 → 2,027 t (+101250%)",report#6418,2027
+FL-01616,14153,yoy_anomaly,low,documented,filed scope1 1 → 196 t (+19500%),report#9065,2016
+FL-01617,14153,yoy_anomaly,low,documented,filed scope1 196 → 2 t (+99%),report#9065,2018
+FL-01618,14153,yoy_anomaly,low,documented,filed scope1 2 → 562 t (+28000%),report#9065,2018
+FL-01619,14153,yoy_anomaly,low,documented,"filed scope1 562 → 1,000 t (+78%)",report#9065,2023
+FL-01620,14274,yoy_anomaly,low,documented,"filed scope1 65,000 → 476,000 t (+632%)",report#9654,2022
+FL-01538,14296,disclosure_gap,medium,reported,"4 facilities w/ Σ20,776,155 t ground-truth emissions but no filed scope-1 disclosure",,2023
+FL-01539,14752,disclosure_gap,medium,reported,"22 facilities w/ Σ715,816 t ground-truth emissions but no filed scope-1 disclosure",,2023
+FL-01621,14804,yoy_anomaly,low,documented,filed scope1 50 → 1 t (+98%),report#11739,2015
+FL-01622,14804,yoy_anomaly,low,documented,filed scope1 1 → 15 t (+1400%),report#11739,2022
+FL-01623,14804,yoy_anomaly,low,documented,filed scope1 15 → 7 t (+53%),report#11739,2023
+FL-01566,14829,disclosure_gap,medium,reported,"4 facilities w/ Σ1,273,880 t ground-truth emissions but no filed scope-1 disclosure",,2023

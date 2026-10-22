@@ -109,10 +109,30 @@ def _company_map(con):
     return m
 
 
+def _match(nn, cmap, names):
+    """Display-name ('Yara') vs legal-name ('Yara International ASA') match:
+    exact norm -> prefix containment -> rapidfuzz (same threshold as the
+    catalog index matcher)."""
+    from rapidfuzz import fuzz
+    if not nn:
+        return None
+    if nn in cmap:
+        return cmap[nn]
+    for k, cid in cmap.items():
+        if len(nn) >= 4 and (k.startswith(nn) or nn.startswith(k)):
+            return cid
+    best = max(names, key=lambda kv: fuzz.ratio(_norm(kv[1]), nn),
+               default=None)
+    if best and fuzz.ratio(_norm(best[1]), nn) >= 88:
+        return best[0]
+    return None
+
+
 def ingest():
     con = db()
     con.execute("PRAGMA busy_timeout=120000")
     cmap = _company_map(con)
+    names = con.execute("SELECT id, name FROM companies").fetchall()
     seen_stub = set()   # names already stubbed this run
     stats = dict(records=0, pdfs=0, matched=0, stubs=0, rows=0)
     for fn in FILES:
@@ -128,7 +148,7 @@ def ingest():
             stats["pdfs"] += 1
             name = (rec.get("company_name") or "").strip()
             nn = _norm(name)
-            cid = cmap.get(nn)
+            cid = cmap.get(nn) or _match(nn, cmap, names)
             if cid is None:
                 if not nn or nn in seen_stub:
                     continue
@@ -172,12 +192,55 @@ def ingest():
     return stats
 
 
+def rematch():
+    """Repoint reports from DataNeed-created stub companies to the real
+    company rows they match (first-ingest ran with exact-norm matching and
+    stubbed everything). Only touches stubs (no ticker/cik/lei) that own
+    dataneed-sourced reports; target must predate the stub."""
+    con = db()
+    con.execute("PRAGMA busy_timeout=120000")
+    stubs = con.execute(
+        """SELECT DISTINCT c.id, c.name FROM companies c
+           WHERE c.ticker IS NULL AND c.cik IS NULL AND c.lei IS NULL
+             AND EXISTS (SELECT 1 FROM reports r WHERE r.company_id=c.id
+                         AND r.acquisition_method='dataneed')""").fetchall()
+    names = con.execute(
+        "SELECT id, name FROM companies WHERE ticker IS NOT NULL"
+        " OR cik IS NOT NULL OR lei IS NOT NULL").fetchall()
+    cmap = _company_map(con)
+    moved = 0
+    for cid, cname in stubs:
+        target = _match(_norm(cname), {k: v for k, v in cmap.items()
+                                     if v != cid}, names)
+        if not target or target == cid:
+            continue
+        # repoint what fits; rows colliding on (company_id,year,url) are
+        # same-report duplicates the target already holds — drop them
+        for rid, in con.execute(
+                "SELECT id FROM reports WHERE company_id=?",
+                (cid,)).fetchall():
+            try:
+                con.execute(
+                    "UPDATE reports SET company_id=? WHERE id=?",
+                    (target, rid))
+            except Exception:
+                con.execute("DELETE FROM reports WHERE id=?", (rid,))
+        con.execute("DELETE FROM companies WHERE id=?", (cid,))
+        moved += 1
+    con.commit()
+    print(f"rematch: {moved}/{len(stubs)} stub companies merged into "
+          "existing companies", flush=True)
+    return moved
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["download", "ingest"])
+    ap.add_argument("cmd", choices=["download", "ingest", "rematch"])
     a = ap.parse_args()
     if a.cmd == "download":
         download()
+    elif a.cmd == "rematch":
+        rematch()
     else:
         ingest()
 
