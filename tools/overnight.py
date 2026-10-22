@@ -218,11 +218,13 @@ while not os.path.exists(STOP):
     if disk_low:
         print(f"[{time.strftime('%H:%M')}] DISK LOW (<30G) — "
               "harvest lanes paused this iter", flush=True)
-    # "m esg.harvest --workers" won't match the --wayback lane's cmdline
-    if not disk_low and not running("m esg.harvest --workers 8"):
+    # "m esg.harvest --workers" won't match the --wayback lane's cmdline.
+    # 16 tor workers: each request rides a different exit, so the same
+    # per-IP politeness holds while aggregate throughput doubles.
+    if not disk_low and not running("m esg.harvest --workers 16"):
         # bounded batch: process exits when drained, relaunch re-reads the
         # catalog so newly-crawled reports join the breadth-first queue
-        bg([PY, "-m", "esg.harvest", "--workers", "8", "--limit", "800"],
+        bg([PY, "-m", "esg.harvest", "--workers", "16", "--limit", "1200"],
             "harvest.log")
     # Wayback direct: ~72% of pending RR PDFs are archived; measured
     # ~500/hr sustained direct vs ~17/hr through tor exits (tor bandwidth
@@ -264,10 +266,12 @@ while not os.path.exists(STOP):
         seq(["-m", "esg.catalog", "ar-index"], "ar-index.log")
         seq(["-m", "esg.catalog", "ar-stubify"], "ar-stubify.log")
     elif uncrawled_slugs("annualreports") > 0:
-        for m in range(2):
-            if not running(f"catalog ar-crawl --shard 2 {m}"):
+        # 4 shards through tor — each scrapy process rides separate exits,
+        # so per-IP politeness holds while aggregate throughput doubles
+        for m in range(4):
+            if not running(f"catalog ar-crawl --shard 4 {m}"):
                 bg([PY, "-u", "-m", "esg.catalog", "ar-crawl",
-                    "--shard", "2", str(m)], f"ar-catalog{m}.log")
+                    "--shard", "4", str(m)], f"ar-catalog{m}.log")
     # pages/figures as sharded lanes — single sequential stages can't keep
     # up with multi-k/hr PDF inflow; report_id % N keeps them disjoint
     for k in range(3):
@@ -288,6 +292,7 @@ while not os.path.exists(STOP):
     # dedicated LLM drain lane: pass-2 ran only AFTER a full pass-1 sweep,
     # leaving the GPU idle for hours. This lane consumes pending_llm
     # continuously (page-text dedup cache cuts call volume ~2x+).
+    # drain-llm ordered newest-report-first (--llm-order desc in extract)
     if not running("esg.extract .*drain-llm"):
         bg([PY, "-m", "esg.extract", "--drain-llm",
             "--llm-workers", "8", "--batch", "6", "--no-docling"],

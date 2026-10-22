@@ -812,7 +812,9 @@ def main():
     # report DESC = newest-cataloged first (breadth coverage lands early).
     rid = "json_extract(payload,'$.report_id')"
     shard = f" AND {rid} % {a.shard[1]} = {a.shard[0]}" if a.shard else ""
-    order = f" ORDER BY {rid} DESC, id" if a.shard else " ORDER BY id"
+    # newest-report-first even unsharded: the drain lane feeds the LLM the
+    # most decision-useful pages first while the tail grinds behind
+    order = f" ORDER BY {rid} DESC, id"
     if a.drain_llm:
         _drain_llm(con, a, shard, order)
         return

@@ -191,49 +191,65 @@ def run_wayback(con, limit=0, workers=3, tor=False):
     proxy = os.environ.get("ESG_PROXY") if tor else None
     pace = _Pace(float(os.environ.get(
         "ESG_WB_PACE", "0.6" if tor else "1.5")))
-    ok = zero_run = 0
+    ok = zero_run = i = 0
     with ThreadPoolExecutor(max_workers=workers) as ex:
-        futs = {ex.submit(fetch_wayback, r, pace, proxy=proxy): r
-                for r in rows}
-        for i, fut in enumerate(as_completed(futs), 1):
-            rid, status, body = fut.result()
-            # IA soft-bans aggressive IPs with conn-refused (0) or 429 —
-            # AIMD pace adapts up; a run of 30 means hard backoff
-            if status in (0, 429):
-                zero_run += 1
-                pace.bad()
-                if zero_run >= 30:
-                    print("wayback: IA throttling/refusing — "
-                          "backing off 10min", flush=True)
-                    time.sleep(600)
+        # bounded in-flight window — completed futures hold whole PDF
+        # bodies; submitting 6000 rows at once buffers GBs and OOMs
+        from concurrent.futures import wait, FIRST_COMPLETED
+        it = iter(rows)
+        futs = {}
+        for _ in range(workers * 4):
+            nxt = next(it, None)
+            if nxt:
+                futs[ex.submit(fetch_wayback, nxt, pace, proxy=proxy)] = nxt
+        while futs:
+            done, _ = wait(futs, return_when=FIRST_COMPLETED)
+            for fut in done:
+                rid, status, body = fut.result()
+                futs.pop(fut)
+                nxt = next(it, None)
+                if nxt:
+                    futs[ex.submit(fetch_wayback, nxt, pace,
+                                   proxy=proxy)] = nxt
+                i += 1
+                # IA soft-bans aggressive IPs with conn-refused (0) or
+                # 429 — AIMD pace adapts up; a run of 30 = hard backoff
+                if status in (0, 429):
+                    zero_run += 1
+                    pace.bad()
+                    if zero_run >= 30:
+                        print("wayback: IA throttling/refusing — "
+                              "backing off 10min", flush=True)
+                        time.sleep(600)
+                        zero_run = 0
+                else:
                     zero_run = 0
-            else:
-                zero_run = 0
-                pace.ok()
-            if status == 200:
-                try:
-                    path, sha = sha256_store_put(body)
+                    pace.ok()
+                if status == 200:
+                    try:
+                        path, sha = sha256_store_put(body)
+                        _write_locked(
+                            con,
+                            """UPDATE reports SET sha256=?, path=?,
+                               fetched_at=?, acquired_at=?,
+                               acquisition_method='web_archive'
+                               WHERE id=?""",
+                            (sha, path, now(), now(), rid))
+                        ok += 1
+                    except ValueError:
+                        pass  # capture wasn't a clean PDF — tor lane's
+                elif status == 404:
+                    # definitive "not archived" — tor lane keeps it,
+                    # wayback skips it in later batches
                     _write_locked(
                         con,
-                        """UPDATE reports SET sha256=?, path=?, fetched_at=?,
-                           acquired_at=?, acquisition_method='web_archive'
-                           WHERE id=?""",
-                        (sha, path, now(), now(), rid))
-                    ok += 1
-                except ValueError:
-                    pass  # capture wasn't a clean PDF — tor lane's job
-            elif status == 404:
-                # definitive "not archived" — tor lane keeps it, wayback
-                # skips it in later batches
-                _write_locked(
-                    con,
-                    "INSERT OR REPLACE INTO jobs(kind,status,payload) "
-                    "VALUES(?,?,?)",
-                    ("harvest", "wb_miss", f'{{"report_id":{rid}}}'))
-            if i % 50 == 0:
-                print(f"wayback: {ok} fetched, {i - ok} not-archived "
-                      f"({i}/{len(rows)})", flush=True)
-    return ok, i - ok if rows else 0
+                        "INSERT OR REPLACE INTO jobs(kind,status,payload) "
+                        "VALUES(?,?,?)",
+                        ("harvest", "wb_miss", f'{{"report_id":{rid}}}'))
+                if i % 50 == 0:
+                    print(f"wayback: {ok} fetched, {i - ok} not-archived "
+                          f"({i}/{len(rows)})", flush=True)
+    return ok, i - ok if rows else (0, 0)
 
 
 # --- Common Crawl lane -----------------------------------------------------
@@ -331,44 +347,58 @@ def run_commoncrawl(con, limit=0, workers=2):
     rows = pending_cc(con, limit)
     con.execute("PRAGMA busy_timeout=120000")
     pace = _Pace(1.0)
-    ok = zero_run = 0
+    ok = zero_run = i = 0
     with ThreadPoolExecutor(max_workers=workers) as ex:
-        futs = {ex.submit(fetch_cc, r, pace): r for r in rows}
-        for i, fut in enumerate(as_completed(futs), 1):
-            rid, status, body = fut.result()
-            if status == 0:
-                zero_run += 1
-                pace.bad()
-                if zero_run >= 30:
-                    print("cc: index refusing — backing off 10min",
-                          flush=True)
-                    time.sleep(600)
+        from concurrent.futures import wait, FIRST_COMPLETED
+        it = iter(rows)
+        futs = {}
+        for _ in range(workers * 4):
+            nxt = next(it, None)
+            if nxt:
+                futs[ex.submit(fetch_cc, nxt, pace)] = nxt
+        while futs:
+            done, _ = wait(futs, return_when=FIRST_COMPLETED)
+            for fut in done:
+                rid, status, body = fut.result()
+                futs.pop(fut)
+                nxt = next(it, None)
+                if nxt:
+                    futs[ex.submit(fetch_cc, nxt, pace)] = nxt
+                i += 1
+                if status == 0:
+                    zero_run += 1
+                    pace.bad()
+                    if zero_run >= 30:
+                        print("cc: index refusing — backing off 10min",
+                              flush=True)
+                        time.sleep(600)
+                        zero_run = 0
+                else:
                     zero_run = 0
-            else:
-                zero_run = 0
-                pace.ok()
-            if status == 200:
-                try:
-                    path, sha = sha256_store_put(body)
+                    pace.ok()
+                if status == 200:
+                    try:
+                        path, sha = sha256_store_put(body)
+                        _write_locked(
+                            con,
+                            """UPDATE reports SET sha256=?, path=?,
+                               fetched_at=?, acquired_at=?,
+                               acquisition_method='common_crawl'
+                               WHERE id=?""",
+                            (sha, path, now(), now(), rid))
+                        ok += 1
+                    except ValueError:
+                        pass
+                elif status == 404:
                     _write_locked(
                         con,
-                        """UPDATE reports SET sha256=?, path=?, fetched_at=?,
-                           acquired_at=?, acquisition_method='common_crawl'
-                           WHERE id=?""",
-                        (sha, path, now(), now(), rid))
-                    ok += 1
-                except ValueError:
-                    pass
-            elif status == 404:
-                _write_locked(
-                    con,
-                    "INSERT OR REPLACE INTO jobs(kind,status,payload) "
-                    "VALUES(?,?,?)",
-                    ("harvest", "cc_miss", f'{{"report_id":{rid}}}'))
-            if i % 50 == 0:
-                print(f"cc: {ok} fetched, {i - ok} miss ({i}/{len(rows)})",
-                      flush=True)
-    return ok, i - ok if rows else 0
+                        "INSERT OR REPLACE INTO jobs(kind,status,payload) "
+                        "VALUES(?,?,?)",
+                        ("harvest", "cc_miss", f'{{"report_id":{rid}}}'))
+                if i % 50 == 0:
+                    print(f"cc: {ok} fetched, {i - ok} miss "
+                          f"({i}/{len(rows)})", flush=True)
+    return ok, i - ok if rows else (0, 0)
 
 
 # --- Save Page Now lane ----------------------------------------------------
@@ -523,42 +553,56 @@ def run_issuer(con, limit=0, workers=20):
     rows = pending_issuer(con, limit)
     con.execute("PRAGMA busy_timeout=120000")
     ok = miss = dup = 0
+    i = 0
+    # bounded in-flight window: finished PDF bodies (10-20MB each) sit in
+    # completed futures until consumed — submitting all rows at once
+    # buffers the whole window in RAM and OOMs. workers*4 caps it.
     with ThreadPoolExecutor(max_workers=workers) as ex:
-        futs = {ex.submit(fetch_issuer, r): r for r in rows}
-        for i, fut in enumerate(as_completed(futs), 1):
-            rid, status, body = fut.result()
-            if status == 200:
-                try:
-                    res = _commit_pdf(con, rid, body, "issuer_direct")
-                    if res == "ok":
-                        ok += 1
-                    else:
-                        dup += 1
-                except ValueError:
+        it = iter(rows)
+        futs = {ex.submit(fetch_issuer, r): r for r in
+                (next(it, None) for _ in range(workers * 4)) if r}
+        while futs:
+            done, _ = __import__("concurrent.futures", fromlist=["wait"]
+                                 ).wait(futs, return_when="FIRST_COMPLETED")
+            for fut in done:
+                rid, status, body = fut.result()
+                r = futs.pop(fut)
+                nxt = next(it, None)
+                if nxt:
+                    futs[ex.submit(fetch_issuer, nxt)] = nxt
+                i += 1
+                if status == 200:
+                    try:
+                        res = _commit_pdf(con, rid, body, "issuer_direct")
+                        if res == "ok":
+                            ok += 1
+                        else:
+                            dup += 1
+                    except ValueError:
+                        _write_locked(
+                            con,
+                            "INSERT OR REPLACE INTO jobs(kind,status,"
+                            "payload) VALUES(?,?,?)",
+                            ("harvest", "issuer_fail",
+                             f'{{"report_id":{rid},"status":{status}}}'))
+                elif status in (404, 410):
+                    _write_locked(
+                        con,
+                        "INSERT OR REPLACE INTO jobs(kind,status,payload) "
+                        "VALUES(?,?,?)",
+                        ("harvest", "issuer_miss", f'{{"report_id":{rid}}}'))
+                    miss += 1
+                else:
                     _write_locked(
                         con,
                         "INSERT OR REPLACE INTO jobs(kind,status,payload) "
                         "VALUES(?,?,?)",
                         ("harvest", "issuer_fail",
                          f'{{"report_id":{rid},"status":{status}}}'))
-            elif status in (404, 410):
-                _write_locked(
-                    con,
-                    "INSERT OR REPLACE INTO jobs(kind,status,payload) "
-                    "VALUES(?,?,?)",
-                    ("harvest", "issuer_miss", f'{{"report_id":{rid}}}'))
-                miss += 1
-            else:
-                _write_locked(
-                    con,
-                    "INSERT OR REPLACE INTO jobs(kind,status,payload) "
-                    "VALUES(?,?,?)",
-                    ("harvest", "issuer_fail",
-                     f'{{"report_id":{rid},"status":{status}}}'))
-            if i % 50 == 0:
-                print(f"issuer: {ok} fetched, {miss} miss, {dup} dup, "
-                      f"{i - ok - miss - dup} fail ({i}/{len(rows)})",
-                      flush=True)
+                if i % 50 == 0:
+                    print(f"issuer: {ok} fetched, {miss} miss, {dup} dup, "
+                          f"{i - ok - miss - dup} fail ({i}/{len(rows)})",
+                          flush=True)
     return ok, miss
 
 
@@ -567,32 +611,49 @@ def run(con, limit=0, workers=4):
     proxy = os.environ.get("ESG_PROXY")
     rows = pending(con, limit)
     ok = fail = 0
+    i = 0
     with ThreadPoolExecutor(max_workers=workers) as ex:
-        futs = {ex.submit(fetch_one, r, proxy): r for r in rows}
-        for i, fut in enumerate(as_completed(futs), 1):
-            rid, status, body = fut.result()
-            r = futs[fut]
-            if status == 200:
-                try:
-                    _commit_pdf(con, rid, body,
-                                "tor_tunnel" if proxy else "http_get")
-                    ok += 1
-                except ValueError:
+        # bounded in-flight window — completed futures hold whole PDF
+        # bodies until consumed; submitting all rows OOMs on big windows
+        from concurrent.futures import wait, FIRST_COMPLETED
+        it = iter(rows)
+        futs = {}
+        for _ in range(workers * 4):
+            nxt = next(it, None)
+            if nxt:
+                futs[ex.submit(fetch_one, nxt, proxy)] = nxt
+        while futs:
+            done, _ = wait(futs, return_when=FIRST_COMPLETED)
+            for fut in done:
+                rid, status, body = fut.result()
+                futs.pop(fut)
+                nxt = next(it, None)
+                if nxt:
+                    futs[ex.submit(fetch_one, nxt, proxy)] = nxt
+                i += 1
+                if status == 200:
+                    try:
+                        _commit_pdf(con, rid, body,
+                                    "tor_tunnel" if proxy else "http_get")
+                        ok += 1
+                    except ValueError:
+                        _write_locked(
+                            con,
+                            "INSERT OR REPLACE INTO jobs(kind,status,"
+                            "payload) VALUES(?,?,?)",
+                            ("harvest", "bad_pdf",
+                             f'{{"report_id":{rid}}}'))
+                else:
+                    fail += 1
                     _write_locked(
                         con,
                         "INSERT OR REPLACE INTO jobs(kind,status,payload) "
                         "VALUES(?,?,?)",
-                        ("harvest", "bad_pdf", f'{{"report_id":{rid}}}'))
-            else:
-                fail += 1
-                _write_locked(
-                    con,
-                    "INSERT OR REPLACE INTO jobs(kind,status,payload) "
-                    "VALUES(?,?,?)",
-                    ("harvest", "failed",
-                     f'{{"report_id":{rid},"status":{status}}}'))
-            if i % 20 == 0:
-                print(f"harvest: {ok} ok, {fail} failed ({i}/{len(rows)})")
+                        ("harvest", "failed",
+                         f'{{"report_id":{rid},"status":{status}}}'))
+                if i % 20 == 0:
+                    print(f"harvest: {ok} ok, {fail} failed "
+                          f"({i}/{len(rows)})", flush=True)
     return ok, fail
 
 
