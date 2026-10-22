@@ -3,13 +3,13 @@ figures:
     value: 14028
     derivation: SELECT COUNT(*) FROM companies
   reports:
-    value: 186768
+    value: 186749
     derivation: SELECT COUNT(*) FROM reports
   reports_harvested:
-    value: 7316
+    value: 8234
     derivation: SELECT COUNT(*) FROM reports WHERE sha256 IS NOT NULL
   extractions:
-    value: 29006
+    value: 29308
     derivation: SELECT COUNT(*) FROM extractions
   facilities:
     value: 1283

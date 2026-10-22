@@ -526,12 +526,15 @@ def process_job(con, job, no_docling=False):
              it.get("scope"), it.get("target_year"), page, it["snippet"],
              p.get("figure_crop"), it["confidence"], it["tier"], None))
         inserted += 1
-    # table tier: structured cells before paying for the model
+    # table tier: structured cells before paying for the model.
+    # path may be NULL — compact.py unlinks the raw PDF once page text
+    # exists; compacted reports skip the file-dependent tiers entirely
     pdf_path = (con.execute("SELECT path FROM reports WHERE id=?",
                             (rid,)).fetchone()
                 if not inserted else None)
+    pdf_path = pdf_path[0] if pdf_path else None
     if pdf_path:
-        for it in table_extract(pdf_path[0], page):
+        for it in table_extract(pdf_path, page):
             if not echo_gate(it["snippet"], text):
                 continue
             con.execute(
@@ -550,7 +553,7 @@ def process_job(con, job, no_docling=False):
     # faster than CPU docling) picks them up echo-gated.
     if not inserted and pdf_path and CTX_RE.search(text) \
             and not no_docling:
-        for it in docling_extract(pdf_path[0], page):
+        for it in docling_extract(pdf_path, page):
             if not echo_gate(it["snippet"], text):
                 continue
             con.execute(

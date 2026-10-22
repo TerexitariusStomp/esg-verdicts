@@ -289,6 +289,12 @@ while not os.path.exists(STOP):
             bg([PY, "-m", "esg.extract", "--shard", str(k), "3",
                 "--llm-workers", llm, "--batch", "6", "--no-docling"],
                f"extract{k}.log")
+    # compact sweeper: once a report's pages/figures/extract pending work
+    # is done the raw PDF is dead weight — unlink it (sha256 stays, so no
+    # refetch; provenance keeps url+method). Turns disk from a hard cap
+    # into a circular buffer; bounded 2000/iter so it never hogs the loop.
+    if not running("esg.compact"):
+        bg([PY, "-m", "esg.compact", "2000"], "compact.log")
     # dedicated LLM drain lane: pass-2 ran only AFTER a full pass-1 sweep,
     # leaving the GPU idle for hours. This lane consumes pending_llm
     # continuously (page-text dedup cache cuts call volume ~2x+).
