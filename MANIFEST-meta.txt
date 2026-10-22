@@ -1,4 +1,4 @@
-manifest_sha256=cd959eecb0d1b36d6933f161fec7c0574551ab21fc014cff80fc4dde1a70fcde
-git_head=a2b271d677e921cc16cc1782e74a9fc9cefba421
-export_version=16
-stamped_at=2026-10-21T17:06:53Z
+manifest_sha256=676f5640fc2abe474b11389377e501ca865bb943dc41d6b817aee4139edb603b
+git_head=34d3d44924df06a79a9416a2b4f6427d5e65e866
+export_version=139
+stamped_at=2026-10-22T14:54:36Z

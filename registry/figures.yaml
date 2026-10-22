@@ -3,13 +3,13 @@ figures:
     value: 14028
     derivation: SELECT COUNT(*) FROM companies
   reports:
-    value: 35367
+    value: 186768
     derivation: SELECT COUNT(*) FROM reports
   reports_harvested:
-    value: 2750
+    value: 7316
     derivation: SELECT COUNT(*) FROM reports WHERE sha256 IS NOT NULL
   extractions:
-    value: 23981
+    value: 29006
     derivation: SELECT COUNT(*) FROM extractions
   facilities:
     value: 1283
@@ -22,10 +22,10 @@ figures:
     derivation: SELECT ROUND(1.0*SUM(company_id IS NOT NULL)/MAX(COUNT(*),1),3) FROM
       facilities
   flags:
-    value: 1707
+    value: 1714
     derivation: SELECT COUNT(*) FROM flags
   flags_publishable:
-    value: 1434
+    value: 1441
     derivation: SELECT COUNT(*) FROM flags WHERE publishable=1
   claims:
     value: 250

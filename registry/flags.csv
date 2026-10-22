@@ -54,6 +54,7 @@ FL-00014,25,yoy_anomaly,low,documented,filed scope1 60 → 1 t (+98%),report#6,2
 FL-00765,28,yoy_anomaly,low,documented,"filed scope1 88,465 → 420,009 t (+375%)",report#17894,2021
 FL-00016,29,disclosure_gap,medium,reported,"1 facilities w/ Σ8,264 t ground-truth emissions but no filed scope-1 disclosure",,2023
 FL-00017,30,disclosure_gap,medium,reported,"2 facilities w/ Σ220,061 t ground-truth emissions but no filed scope-1 disclosure",,2023
+FL-01714,30,yoy_anomaly,low,documented,"filed scope1 2,021 → 712,400 t (+35150%)",report#13040,2022
 FL-00766,30,yoy_anomaly,low,documented,"filed scope1 712,400 → 4 t (+100%)",report#13040,2022
 FL-00018,34,disclosure_gap,medium,reported,"1 facilities w/ Σ21,699 t ground-truth emissions but no filed scope-1 disclosure",,2023
 FL-00019,36,disclosure_gap,medium,reported,"7 facilities w/ Σ16,029,729 t ground-truth emissions but no filed scope-1 disclosure",,2023
@@ -80,6 +81,12 @@ FL-00025,41,yoy_anomaly,low,documented,"filed scope1 51,000,000 → 90 t (+100%)
 FL-00026,41,yoy_anomaly,low,documented,filed scope1 90 → 2 t (+98%),report#56,2022
 FL-00770,42,yoy_anomaly,low,documented,"filed scope1 2 → 44,200 t (+2209900%)",report#12588,2023
 FL-00027,49,disclosure_gap,medium,reported,"1 facilities w/ Σ22,853 t ground-truth emissions but no filed scope-1 disclosure",,2023
+FL-01708,49,yoy_anomaly,low,documented,"filed scope1 137 → 55,000 t (+40046%)",report#27036,2020
+FL-01710,49,yoy_anomaly,low,documented,filed scope1 1 → 5 t (+400%),report#27034,2022
+FL-01712,49,yoy_anomaly,low,documented,"filed scope1 110 → 60,000 t (+54445%)",report#27034,2022
+FL-01711,49,yoy_anomaly,low,documented,filed scope1 5 → 110 t (+2100%),report#27034,2022
+FL-01709,49,yoy_anomaly,low,documented,"filed scope1 60,000 → 1 t (+100%)",report#27035,2022
+FL-01713,49,yoy_anomaly,low,documented,"filed scope1 60,000 → 1 t (+100%)",report#27035,2026
 FL-01628,59,yoy_anomaly,low,documented,"filed scope1 1,000 → 131,000 t (+13000%)",report#22127,2022
 FL-01679,62,yoy_anomaly,low,documented,"filed scope1 2,050 → 35 t (+98%)",report#25413,2021
 FL-01681,62,yoy_anomaly,low,documented,filed scope1 3 → 72 t (+2300%),report#25413,2021

@@ -96,11 +96,14 @@ def pending(con, limit=0):
 
 
 def pending_wayback(con, limit=0):
-    """RR-hosted PDFs only, newest-cataloged first — the Tor lanes take
-    breadth order, so reverse-id order minimizes row collisions."""
+    """Blocked-host PDFs (RR + annualreports — same DigitalOcean IP banned
+    us) fetchable via Wayback replay instead of Tor. Newest-cataloged
+    first — the Tor lanes take breadth order, so reverse-id minimizes row
+    collisions."""
     q = """SELECT r.id, r.url FROM reports r
            WHERE r.sha256 IS NULL
-             AND r.url LIKE '%responsibilityreports.com/HostedData/%.pdf'
+             AND (r.url LIKE '%responsibilityreports.com/HostedData/%.pdf'
+                  OR r.url LIKE '%annualreports.com/HostedData/%.pdf')
              AND r.id NOT IN (
                SELECT CAST(json_extract(payload,'$.report_id') AS INT)
                FROM jobs WHERE kind='harvest' AND status='wb_miss')
@@ -478,12 +481,17 @@ def run_spn(con, limit=0, pace_s=35):
 
 
 def pending_issuer(con, limit=0):
-    """Non-RR-hosted pending PDFs. Companies that still have RR-hosted rows
+    """True issuer-hosted pending PDFs — RR and annualreports are the same
+    banned host, so the wayback lane owns both (direct replay is ~30x
+    faster than Tor to that IP). Companies that still have RR-hosted rows
     pending go first (fills the existing backlog tail fastest), then
     breadth by report id."""
     q = """SELECT r.id, r.url FROM reports r
            WHERE r.sha256 IS NULL AND r.url LIKE '%.pdf'
              AND r.url NOT LIKE '%responsibilityreports%'
+             AND (r.url NOT LIKE '%annualreports%' OR r.id IN (
+               SELECT CAST(json_extract(payload,'$.report_id') AS INT)
+               FROM jobs WHERE kind='harvest' AND status='wb_miss'))
              AND r.id NOT IN (
                SELECT CAST(json_extract(payload,'$.report_id') AS INT)
                FROM jobs WHERE kind='harvest' AND status='issuer_miss')
