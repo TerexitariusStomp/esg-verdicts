@@ -138,9 +138,26 @@ def fetch_wayback(r, timeout=90):
     return r["id"], status, body
 
 
+def _write_locked(con, sql, params, tries=8):
+    """Wayback+tor lanes share the writer with extract — a slow batch can
+    hold the lock past busy_timeout; retry instead of dying."""
+    for t in range(tries):
+        try:
+            con.execute(sql, params)
+            con.commit()
+            return True
+        except Exception as e:
+            if "locked" in str(e) and t < tries - 1:
+                time.sleep(10 * (t + 1))
+                continue
+            raise
+    return False
+
+
 def run_wayback(con, limit=0, workers=4):
     from concurrent.futures import ThreadPoolExecutor, as_completed
     rows = pending_wayback(con, limit)
+    con.execute("PRAGMA busy_timeout=120000")
     ok = miss = zero_run = 0
     with ThreadPoolExecutor(max_workers=workers) as ex:
         futs = {ex.submit(fetch_wayback, r): r for r in rows}
@@ -160,7 +177,8 @@ def run_wayback(con, limit=0, workers=4):
             if status == 200:
                 try:
                     path, sha = sha256_store_put(body)
-                    con.execute(
+                    _write_locked(
+                        con,
                         """UPDATE reports SET sha256=?, path=?, fetched_at=?,
                            acquired_at=?, acquisition_method='web_archive'
                            WHERE id=?""",
@@ -171,12 +189,11 @@ def run_wayback(con, limit=0, workers=4):
             elif status == 404:
                 # definitive "not archived" — tor lane keeps it, wayback
                 # skips it in later batches
-                con.execute(
+                _write_locked(
+                    con,
                     "INSERT OR REPLACE INTO jobs(kind,status,payload) "
                     "VALUES(?,?,?)",
                     ("harvest", "wb_miss", f'{{"report_id":{rid}}}'))
-            # other non-200 = IA hiccup — leave unmarked, retry next batch
-            con.commit()
             if i % 50 == 0:
                 print(f"wayback: {ok} fetched, {i - ok} not-archived "
                       f"({i}/{len(rows)})", flush=True)
