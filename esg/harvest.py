@@ -109,6 +109,24 @@ def pending_wayback(con, limit=0):
 WB = "https://web.archive.org/web/2id_/"
 
 
+class _Pace:
+    """AIMD throttle probe: relax after sustained success, back off on any
+    refusal — converges on the source's max tolerated rate without a ban."""
+    def __init__(self, start):
+        self.v = start
+        self.streak = 0
+
+    def ok(self):
+        self.streak += 1
+        if self.streak >= 200 and self.v > 0.8:
+            self.v = max(0.8, self.v - 0.2)
+            self.streak = 0
+
+    def bad(self):
+        self.streak = 0
+        self.v = min(5.0, self.v + 0.5)
+
+
 def fetch_one(r, proxy, retries=4):
     """One report: retries with NEWNYM rotation on 403 or a stalled/
     timed-out circuit (a dying exit can crawl at ~10KB/s and every lane
@@ -128,11 +146,14 @@ def fetch_one(r, proxy, retries=4):
     return r["id"], status, b""
 
 
-def fetch_wayback(r, timeout=90):
+def fetch_wayback(r, pace, timeout=90):
     """Wayback first: IA serves archived RR PDFs at multi-MB/s without
     touching RR's rate-limiting edge. '2' = latest capture, 'id_' = raw
     bytes (no toolbar rewrite). A 404 means 'not archived' — the caller
-    must NOT treat it as a failed fetch; the Tor lane still owns the row."""
+    must NOT treat it as a failed fetch; the Tor lane still owns the row.
+    pace = shared _Pace (AIMD): IA soft-bans bursty IPs even at low worker
+    counts, so the rate self-tunes instead of holding a guessed constant."""
+    time.sleep(pace.v)
     status, body, rc, elapsed = curl_fetch(
         WB + r["url"], proxy=None, timeout=timeout)
     return r["id"], status, body
@@ -154,19 +175,21 @@ def _write_locked(con, sql, params, tries=8):
     return False
 
 
-def run_wayback(con, limit=0, workers=4):
+def run_wayback(con, limit=0, workers=3):
     from concurrent.futures import ThreadPoolExecutor, as_completed
     rows = pending_wayback(con, limit)
     con.execute("PRAGMA busy_timeout=120000")
-    ok = miss = zero_run = 0
+    pace = _Pace(float(os.environ.get("ESG_WB_PACE", "1.5")))
+    ok = zero_run = 0
     with ThreadPoolExecutor(max_workers=workers) as ex:
-        futs = {ex.submit(fetch_wayback, r): r for r in rows}
+        futs = {ex.submit(fetch_wayback, r, pace): r for r in rows}
         for i, fut in enumerate(as_completed(futs), 1):
             rid, status, body = fut.result()
             # IA soft-bans aggressive IPs with conn-refused (0) or 429 —
-            # a run of them means back off, not burn the batch at 50/s
+            # AIMD pace adapts up; a run of 30 means hard backoff
             if status in (0, 429):
                 zero_run += 1
+                pace.bad()
                 if zero_run >= 30:
                     print("wayback: IA throttling/refusing — "
                           "backing off 10min", flush=True)
@@ -174,6 +197,7 @@ def run_wayback(con, limit=0, workers=4):
                     zero_run = 0
             else:
                 zero_run = 0
+                pace.ok()
             if status == 200:
                 try:
                     path, sha = sha256_store_put(body)
@@ -197,6 +221,141 @@ def run_wayback(con, limit=0, workers=4):
             if i % 50 == 0:
                 print(f"wayback: {ok} fetched, {i - ok} not-archived "
                       f"({i}/{len(rows)})", flush=True)
+    return ok, i - ok if rows else 0
+
+
+# --- Common Crawl lane -----------------------------------------------------
+# Third source: the CC index maps URL -> WARC byte-range; data.commoncrawl.org
+# is S3-hosted, so misses on Wayback still resolve at bulk speed here.
+_CC_API = None
+
+
+def _cc_index_api():
+    global _CC_API
+    if not _CC_API:
+        status, body, rc, _ = curl_fetch(
+            "https://index.commoncrawl.org/collinfo.json", timeout=30)
+        if status == 200:
+            try:
+                _CC_API = json.loads(body)[0]["cdx-api"]
+            except Exception:
+                pass
+    return _CC_API
+
+
+def _cc_lookup(url):
+    """Latest 200-status capture -> (filename, offset, length) on hit,
+    None on a definitive index miss, "?" when the index itself failed
+    (5xx/timeout) — callers must NOT record misses for "?"."""
+    api = _cc_index_api()
+    if not api:
+        return "?"
+    from urllib.parse import quote
+    q = (f"{api}?url={quote(url, safe='')}&output=json"
+         f"&filter=status:200&limit=1")
+    status, body, rc, _ = curl_fetch(q, timeout=30)
+    if status != 200:
+        return "?"
+    for ln in body.strip().split(b"\n"):
+        try:
+            rec = json.loads(ln)
+        except Exception:
+            continue
+        if rec.get("mime") == "application/pdf" and all(
+                k in rec for k in ("filename", "offset", "length")):
+            return rec["filename"], int(rec["offset"]), int(rec["length"])
+        if all(k in rec for k in ("filename", "offset", "length")):
+            return rec["filename"], int(rec["offset"]), int(rec["length"])
+    return None
+
+
+def fetch_cc(r, pace):
+    """Index query -> WARC range fetch -> PDF payload. A miss means CC
+    never captured it (or as non-PDF) — caller records cc_miss."""
+    time.sleep(pace.v)
+    rec = _cc_lookup(r["url"])
+    if rec == "?":
+        return r["id"], 0, b""   # index outage — retryable, never a miss
+    if not rec:
+        return r["id"], 404, b""
+    filename, offset, length = rec
+    end = offset + length - 1
+    cmd = ["curl", "-s", "-m", "120", "-r", f"{offset}-{end}",
+           "-o", "-", f"https://data.commoncrawl.org/{filename}"]
+    try:
+        p = subprocess.run(cmd, capture_output=True, timeout=150)
+    except Exception:
+        return r["id"], 0, b""
+    if p.returncode != 0 or not p.stdout:
+        return r["id"], 0, b""
+    try:
+        import io
+        from warcio.archiveiterator import ArchiveIterator
+        for wrec in ArchiveIterator(io.BytesIO(p.stdout)):
+            if wrec.rec_type == "response":
+                return r["id"], 200, wrec.content_stream().read()
+    except Exception:
+        pass
+    return r["id"], 0, b""
+
+
+def pending_cc(con, limit=0):
+    """RR PDFs not in CC yet — wb_miss rows first (wayback will never serve
+    those), then everything else pending, oldest-cataloged first."""
+    miss = ("SELECT CAST(json_extract(payload,'$.report_id') AS INT) "
+            "FROM jobs WHERE kind='harvest' AND status='{}'")
+    q = f"""SELECT r.id, r.url FROM reports r
+            WHERE r.sha256 IS NULL
+              AND r.url LIKE '%responsibilityreports.com/HostedData/%.pdf'
+              AND r.id NOT IN ({miss.format('cc_miss')})
+            ORDER BY r.id IN ({miss.format('wb_miss')}) DESC, r.id ASC"""
+    if limit:
+        q += f" LIMIT {limit}"
+    return con.execute(q).fetchall()
+
+
+def run_commoncrawl(con, limit=0, workers=2):
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    rows = pending_cc(con, limit)
+    con.execute("PRAGMA busy_timeout=120000")
+    pace = _Pace(1.0)
+    ok = zero_run = 0
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        futs = {ex.submit(fetch_cc, r, pace): r for r in rows}
+        for i, fut in enumerate(as_completed(futs), 1):
+            rid, status, body = fut.result()
+            if status == 0:
+                zero_run += 1
+                pace.bad()
+                if zero_run >= 30:
+                    print("cc: index refusing — backing off 10min",
+                          flush=True)
+                    time.sleep(600)
+                    zero_run = 0
+            else:
+                zero_run = 0
+                pace.ok()
+            if status == 200:
+                try:
+                    path, sha = sha256_store_put(body)
+                    _write_locked(
+                        con,
+                        """UPDATE reports SET sha256=?, path=?, fetched_at=?,
+                           acquired_at=?, acquisition_method='common_crawl'
+                           WHERE id=?""",
+                        (sha, path, now(), now(), rid))
+                    ok += 1
+                except ValueError:
+                    pass
+            elif status == 404:
+                _write_locked(
+                    con,
+                    "INSERT OR REPLACE INTO jobs(kind,status,payload) "
+                    "VALUES(?,?,?)",
+                    ("harvest", "cc_miss", f'{{"report_id":{rid}}}'))
+            if i % 50 == 0:
+                print(f"cc: {ok} fetched, {i - ok} miss ({i}/{len(rows)})",
+                      flush=True)
     return ok, i - ok if rows else 0
 
 
@@ -244,11 +403,16 @@ def main():
                     help="concurrent curl lanes")
     ap.add_argument("--wayback", action="store_true",
                     help="fetch RR PDFs via Wayback Machine (no proxy)")
+    ap.add_argument("--commoncrawl", action="store_true",
+                    help="fetch RR PDFs via Common Crawl WARC (no proxy)")
     a = ap.parse_args()
     con = db()
     if a.wayback:
         ok, miss = run_wayback(con, a.limit, a.workers)
         print(f"wayback: {ok} fetched, {miss} not-archived")
+    elif a.commoncrawl:
+        ok, miss = run_commoncrawl(con, a.limit, a.workers)
+        print(f"commoncrawl: {ok} fetched, {miss} miss")
     else:
         ok, fail = run(con, a.limit, a.workers)
         print(f"harvest: {ok} fetched, {fail} failed")

@@ -33,7 +33,7 @@ def running(pat):
 # per-lane cgroup memory caps (30GB box): a runaway stage is OOM-killed and
 # relaunched next iteration — the machine never freezes
 MEM_CAPS = [
-    ("esg.extract", "10G"),  # docling+torch+pdfplumber
+    ("esg.extract", "6G"),   # docling+torch+pdfplumber (x3 shards)
     ("esg.figures", "6G"),   # onnxruntime-gpu
     ("esg.claims", "6G"),
     ("esg.pages", "4G"),
@@ -56,8 +56,13 @@ def capped(args):
         if any(pat in a for a in args):
             mem = m
             break
-    return ["systemd-run", "--user", "--scope", "--quiet", "--collect",
-            "-p", f"MemoryMax={mem}"] + args
+    out = ["systemd-run", "--user", "--scope", "--quiet", "--collect",
+           "-p", f"MemoryMax={mem}"]
+    # extract shards get low CPU weight so the desktop stays responsive
+    # under load while still using idle cores at full speed
+    if any("esg.extract" in a for a in args):
+        out += ["-p", "CPUWeight=30"]
+    return out + args
 
 
 def mem_ok():
@@ -72,8 +77,13 @@ def mem_ok():
 
 
 def bg(args, log):
+    env = ENV
+    if any(s in args for s in NO_GPU_STAGES):
+        # same CUDA-teardown guard as seq(): lanes must not build GPU
+        # contexts — llama-server owns the GPU
+        env = dict(ENV, CUDA_VISIBLE_DEVICES="")
     with open(os.path.join(LOGDIR, log), "ab") as f:
-        return subprocess.Popen(capped(args), cwd=ROOT, env=ENV,
+        return subprocess.Popen(capped(args), cwd=ROOT, env=env,
                                 stdout=f, stderr=subprocess.STDOUT)
 
 
@@ -163,8 +173,6 @@ def snapshot(tag):
 STAGES = [
     (["-m", "esg.pages"], "pages.log"),
     (["-m", "esg.figures"], "figures.log"),
-    (["-m", "esg.extract", "--llm-workers", "8", "--batch", "3"],
-     "extract.log"),
     (["-m", "esg.filings", "--limit", "20"], "filings.log"),
     (["-m", "esg.litigate"], "litigate.log"),
     (["-m", "esg.verify"], "verify.log"),
@@ -182,17 +190,31 @@ while not os.path.exists(STOP):
     it += 1
     keepalive()
     # "m esg.harvest --workers" won't match the --wayback lane's cmdline
-    if not running("m esg.harvest --workers"):
+    if not running("m esg.harvest --workers 8"):
         # bounded batch: process exits when drained, relaunch re-reads the
         # catalog so newly-crawled reports join the breadth-first queue
-        bg([PY, "-m", "esg.harvest", "--workers", "6", "--limit", "800"],
+        bg([PY, "-m", "esg.harvest", "--workers", "8", "--limit", "800"],
             "harvest.log")
     # Wayback lane: ~72% of pending RR PDFs are archived; IA serves them
     # at multi-MB/s with no proxy and zero load on RR's edge. Big bound —
-    # the batch spans iterations so the lane never idles mid-run.
+    # the batch spans iterations so the lane never idles mid-run. AIMD
+    # pacing (ESG_WB_PACE) self-tunes to IA's tolerated rate.
     if not running("esg.harvest .*wayback"):
-        bg([PY, "-m", "esg.harvest", "--wayback", "--workers", "4",
+        bg([PY, "-m", "esg.harvest", "--wayback", "--workers", "3",
             "--limit", "5000"], "wayback.log")
+    # Common Crawl lane: covers the wb_miss tail — index query then S3-speed
+    # WARC range fetch, no proxy needed
+    if not running("esg.harvest .*commoncrawl"):
+        bg([PY, "-m", "esg.harvest", "--commoncrawl", "--workers", "2",
+            "--limit", "3000"], "commoncrawl.log")
+    # extract as 3 disjoint job-shard lanes (id % 3) — pass-1 parallelizes
+    # ~3x; LLM workers sum to llama-server's -np 8 slots; CPUWeight=30 keeps
+    # the desktop responsive under load
+    for k, llm in ((0, "4"), (1, "2"), (2, "2")):
+        if not running(f"esg.extract --shard {k}"):
+            bg([PY, "-m", "esg.extract", "--shard", str(k), "3",
+                "--llm-workers", llm, "--batch", "6"],
+               f"extract{k}.log")
     if not running("m esg.claims"):
         bg([PY, "-u", "-m", "esg.claims", "--workers", "8"], "claims.log")
     # geo is network-bound (Climate TRACE API), small per-company commits —
@@ -219,5 +241,5 @@ while not os.path.exists(STOP):
                   "skipping remaining stages this iter", flush=True)
             break
         seq(args, log)
-    time.sleep(180)
+    time.sleep(90)
 print("STOP file found — supervisor exiting", flush=True)

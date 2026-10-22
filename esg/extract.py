@@ -13,8 +13,22 @@ Verbatim rule: a row lands only if snippet is a substring of source text
 import argparse
 import json
 import re
+import time
 
 from .esg import db, echo_gate, extract_json_list, gw_chat, gw_up, now
+
+
+def _lock_retry(fn, tries=6):
+    """3 extract shards + harvest lanes share the writer; a slow peer can
+    hold the lock past busy_timeout — retry with backoff instead of dying."""
+    for t in range(tries):
+        try:
+            return fn()
+        except Exception as e:
+            if "locked" in str(e) and t < tries - 1:
+                time.sleep(10 * (t + 1))
+                continue
+            raise
 
 NUM = r"([\d,]+(?:\.\d+)?)"
 YEAR = r"(20[0-2]\d)"
@@ -176,15 +190,32 @@ def context_extract(text):
     return out
 
 
+_PLUMBER = {"path": None, "pdf": None}
+
+
+def _plumber(pdf_path):
+    """One-entry cache — extract jobs are id-contiguous per report, so the
+    same PDF gets opened once instead of once per page (O(pages^2) -> O(1))."""
+    if _PLUMBER["path"] != pdf_path:
+        if _PLUMBER["pdf"] is not None:
+            try:
+                _PLUMBER["pdf"].close()
+            except Exception:
+                pass
+        import pdfplumber
+        _PLUMBER["pdf"] = pdfplumber.open(pdf_path)
+        _PLUMBER["path"] = pdf_path
+    return _PLUMBER["pdf"]
+
+
 def table_extract(pdf_path, page_no):
     """Deterministic table tier: pdfplumber rows carrying a metric label
     plus a number+unit cell. Cells are verbatim — higher precision than LLM."""
-    import pdfplumber
     try:
-        with pdfplumber.open(pdf_path) as pdf:
-            if page_no < 1 or page_no > len(pdf.pages):
-                return []
-            tables = pdf.pages[page_no - 1].extract_tables()
+        pdf = _plumber(pdf_path)
+        if page_no < 1 or page_no > len(pdf.pages):
+            return []
+        tables = pdf.pages[page_no - 1].extract_tables()
     except Exception:
         return []
     out, seen = [], set()
@@ -254,6 +285,23 @@ def _docling_conv():
     return _DOCLING
 
 
+_FITZ = {"path": None, "doc": None}
+
+
+def _fitz(pdf_path):
+    """Same one-entry cache for the docling temp-page builder."""
+    if _FITZ["path"] != pdf_path:
+        if _FITZ["doc"] is not None:
+            try:
+                _FITZ["doc"].close()
+            except Exception:
+                pass
+        import pymupdf
+        _FITZ["doc"] = pymupdf.open(pdf_path)
+        _FITZ["path"] = pdf_path
+    return _FITZ["doc"]
+
+
 def docling_extract(pdf_path, page_no):
     """Docling layout tier on a single page — catches borderless tables
     pdfplumber misses. Rows -> CTX_RULES mapping, verbatim cells."""
@@ -261,7 +309,7 @@ def docling_extract(pdf_path, page_no):
     import tempfile
     import os
     try:
-        src = pymupdf.open(pdf_path)
+        src = _fitz(pdf_path)
         if page_no < 1 or page_no > src.page_count:
             return []
         one = pymupdf.open()
@@ -579,24 +627,29 @@ def main():
                     help="parallel gateway slots (llama-server n_slots)")
     ap.add_argument("--batch", type=int, default=3,
                     help="pages per gateway call (0 = one call per page)")
+    ap.add_argument("--shard", type=int, nargs=2, metavar=("K", "N"),
+                    help="process only jobs where id %% N = K — disjoint "
+                    "shards parallelize pass-1 with no claim protocol")
     a = ap.parse_args()
     con = db()
+    con.execute("PRAGMA busy_timeout=120000")
+    shard = f" AND id % {a.shard[1]} = {a.shard[0]}" if a.shard else ""
     # pass 1: regex + context tiers on pending and previously-LLM-queued pages
     q = ("SELECT id, payload FROM jobs WHERE kind='extract' AND "
-         "status IN ('pending','pending_llm') ORDER BY id")
+         f"status IN ('pending','pending_llm'){shard} ORDER BY id")
     if a.limit:
         q += f" LIMIT {a.limit}"
     total = 0
     for job in con.execute(q).fetchall():
-        total += process_job(con, job)
+        total += _lock_retry(lambda: process_job(con, job))
     print(f"extract regex: {total} metrics")
     # pass 2: LLM only where regex missed (or on all done pages if --llm),
     # parallel across the gateway's slots
     q2 = ("SELECT id, payload FROM jobs WHERE kind='extract' AND "
-          "status='pending_llm' ORDER BY id")
+          f"status='pending_llm'{shard} ORDER BY id")
     if a.llm:
         q2 = ("SELECT id, payload FROM jobs WHERE kind='extract' AND "
-              "status IN ('pending_llm','regex_done') ORDER BY id")
+              f"status IN ('pending_llm','regex_done'){shard} ORDER BY id")
     if a.limit:
         q2 += f" LIMIT {a.limit}"
     jobs = con.execute(q2).fetchall()
@@ -609,10 +662,12 @@ def main():
                           for i in range(0, len(jobs), a.batch)]
                 for results in ex.map(llm_work_batch, chunks):
                     for job_id, p, items in results:
-                        total2 += llm_insert(con, job_id, p, items)
+                        total2 += _lock_retry(
+                            lambda: llm_insert(con, job_id, p, items))
             else:
                 for job_id, p, items in ex.map(llm_work, jobs):
-                    total2 += llm_insert(con, job_id, p, items)
+                    total2 += _lock_retry(
+                        lambda: llm_insert(con, job_id, p, items))
         print(f"extract llm: {total2} metrics on {len(jobs)} pages")
         total += total2
     elif jobs:
