@@ -58,10 +58,15 @@ def capped(args):
             break
     out = ["systemd-run", "--user", "--scope", "--quiet", "--collect",
            "-p", f"MemoryMax={mem}"]
-    # extract shards get low CPU weight so the desktop stays responsive
-    # under load while still using idle cores at full speed
-    if any("esg.extract" in a for a in args):
-        out += ["-p", "CPUWeight=30"]
+    # extract shards + figures are multi-threaded CPU (docling/onnx spawn
+    # ~117 threads/process regardless of OMP_* envs) — taskset-pins them to
+    # cores 0-15 so cores 16-23 always stay free for the desktop. (cgroup
+    # AllowedCPUs needs cpuset delegation user scopes lack; taskset doesn't)
+    if any("esg.extract" in a or "esg.figures" in a for a in args):
+        return out + ["-p", "CPUWeight=30",
+                      "--setenv=OMP_NUM_THREADS=6",
+                      "--setenv=TORCH_NUM_THREADS=6",
+                      "taskset", "-c", "0-15"] + args
     return out + args
 
 
