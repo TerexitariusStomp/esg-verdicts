@@ -162,6 +162,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--report", type=int, default=0)
+    ap.add_argument("--shard", type=int, nargs=2, metavar=("K", "N"),
+                    help="process reports where id %% N = K — sharded "
+                    "lanes keep pace with multi-k/hr harvest inflow")
     a = ap.parse_args()
     con = db()
     q = ("SELECT r.id, r.path FROM reports r WHERE r.sha256 IS NOT NULL"
@@ -169,8 +172,11 @@ def main():
          "j.status='pending' AND json_extract(j.payload,'$.report_id')=r.id)")
     if a.report:
         q = f"SELECT id, path FROM reports WHERE id={a.report}"
-    elif a.limit:
-        q += f" LIMIT {a.limit}"
+    else:
+        if a.shard:
+            q += f" AND r.id % {a.shard[1]} = {a.shard[0]}"
+        if a.limit:
+            q += f" LIMIT {a.limit}"
     tc = to = 0
     for r in con.execute(q).fetchall():
         try:

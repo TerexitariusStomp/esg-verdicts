@@ -10,6 +10,7 @@ everything is resumable/idempotent.
 """
 import json
 import os
+import shutil
 import sqlite3
 import subprocess
 import time
@@ -126,8 +127,13 @@ def keepalive():
             "-md", os.path.expanduser(
                 "~/models/Llama-3.2-1B-Instruct-Q4_K_M.gguf"),
             "--spec-type", "draft-simple",
-            "--port", "8080", "-ngl", "99", "-c", "24576",
-            "-np", "8", "--jinja"], "llama.log")
+            "--port", "8080", "-ngl", "99",
+            # 8k ctx/slot: batch=6 page prompts (~5-6k tok) need it —
+            # 24576/8=3072 was silently rejecting every batch call.
+            # q8 KV cache halves the ~7.4GB fp16 KV to fit the 12GB card.
+            "-c", "65536", "-np", "8",
+            "--cache-type-k", "q8_0", "--cache-type-v", "q8_0",
+            "-fa", "--jinja"], "llama.log")
         time.sleep(15)
 
 
@@ -176,8 +182,6 @@ def snapshot(tag):
 
 
 STAGES = [
-    (["-m", "esg.pages"], "pages.log"),
-    (["-m", "esg.figures"], "figures.log"),
     (["-m", "esg.filings", "--limit", "20"], "filings.log"),
     (["-m", "esg.litigate"], "litigate.log"),
     (["-m", "esg.verify"], "verify.log"),
@@ -194,32 +198,59 @@ it = 0
 while not os.path.exists(STOP):
     it += 1
     keepalive()
+    # disk watchdog: full history ~325GB vs ~390GB free — pause the fetch
+    # lanes (not extract) when space gets tight so the box never wedges
+    disk_low = shutil.disk_usage(ROOT).free < 30 * 1024**3
+    if disk_low:
+        print(f"[{time.strftime('%H:%M')}] DISK LOW (<30G) — "
+              "harvest lanes paused this iter", flush=True)
     # "m esg.harvest --workers" won't match the --wayback lane's cmdline
-    if not running("m esg.harvest --workers 8"):
+    if not disk_low and not running("m esg.harvest --workers 8"):
         # bounded batch: process exits when drained, relaunch re-reads the
         # catalog so newly-crawled reports join the breadth-first queue
         bg([PY, "-m", "esg.harvest", "--workers", "8", "--limit", "800"],
             "harvest.log")
-    # Wayback lane: ~72% of pending RR PDFs are archived; IA serves them
-    # at multi-MB/s with no proxy and zero load on RR's edge. Big bound —
-    # the batch spans iterations so the lane never idles mid-run. AIMD
-    # pacing (ESG_WB_PACE) self-tunes to IA's tolerated rate.
-    if not running("esg.harvest .*wayback"):
-        bg([PY, "-m", "esg.harvest", "--wayback", "--workers", "3",
-            "--limit", "5000"], "wayback.log")
+    # Wayback-through-Tor: ~72% of pending RR PDFs are archived; IA serves
+    # them at multi-MB/s and RR's edge sees zero load. 12 workers each
+    # pace their own circuit (~0.6s AIMD) — aggregate ~6-8 req/s spread
+    # across exits, NEWNYM on any throttled/stalled circuit.
+    if not disk_low and not running("esg.harvest .*wayback"):
+        bg([PY, "-m", "esg.harvest", "--wayback-tor", "--workers", "12",
+            "--limit", "6000"], "wayback.log")
     # Common Crawl lane: covers the wb_miss tail — index query then S3-speed
     # WARC range fetch, no proxy needed
-    if not running("esg.harvest .*commoncrawl"):
+    if not disk_low and not running("esg.harvest .*commoncrawl"):
         bg([PY, "-m", "esg.harvest", "--commoncrawl", "--workers", "2",
             "--limit", "3000"], "commoncrawl.log")
-    # extract as 3 disjoint job-shard lanes (id % 3) — pass-1 parallelizes
-    # ~3x; LLM workers sum to llama-server's -np 8 slots; CPUWeight=30 keeps
-    # the desktop responsive under load
+    # SPN lane: for PDFs archived nowhere, ask IA to capture the URL itself
+    # (IA fetches RR, we harvest the fresh capture via the wayback lane —
+    # RR sees zero load from us). Anonymous SPN is rate-tight, pace ~1/35s.
+    if not disk_low and not running("esg.harvest .*--spn"):
+        bg([PY, "-m", "esg.harvest", "--spn", "--limit", "150"], "spn.log")
+    # pages/figures as sharded lanes — single sequential stages can't keep
+    # up with multi-k/hr PDF inflow; report_id % N keeps them disjoint
+    for k in range(3):
+        if not running(f"esg.pages --shard {k}"):
+            bg([PY, "-m", "esg.pages", "--shard", str(k), "3"],
+               f"pages{k}.log")
+    for k in range(2):
+        if not running(f"esg.figures --shard {k}"):
+            bg([PY, "-m", "esg.figures", "--shard", str(k), "2"],
+               f"figures{k}.log")
+    # extract as 3 disjoint job-shard lanes (report_id % 3) — pass-1
+    # parallelizes ~3x; CPUWeight=30 keeps the desktop responsive
     for k, llm in ((0, "4"), (1, "2"), (2, "2")):
         if not running(f"esg.extract --shard {k}"):
             bg([PY, "-m", "esg.extract", "--shard", str(k), "3",
                 "--llm-workers", llm, "--batch", "6", "--no-docling"],
                f"extract{k}.log")
+    # dedicated LLM drain lane: pass-2 ran only AFTER a full pass-1 sweep,
+    # leaving the GPU idle for hours. This lane consumes pending_llm
+    # continuously (page-text dedup cache cuts call volume ~2x+).
+    if not running("esg.extract .*drain-llm"):
+        bg([PY, "-m", "esg.extract", "--drain-llm",
+            "--llm-workers", "8", "--batch", "6", "--no-docling"],
+           "extract-llm.log")
     if not running("m esg.claims"):
         bg([PY, "-u", "-m", "esg.claims", "--workers", "8"], "claims.log")
     # geo is network-bound (Climate TRACE API), small per-company commits —

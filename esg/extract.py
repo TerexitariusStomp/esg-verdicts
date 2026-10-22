@@ -11,8 +11,11 @@ Verbatim rule: a row lands only if snippet is a substring of source text
 (whitespace-normalized). The verify gate re-checks this offline.
 """
 import argparse
+import hashlib
 import json
 import re
+import signal
+import threading
 import time
 
 from .esg import db, echo_gate, extract_json_list, gw_chat, gw_up, now
@@ -37,6 +40,7 @@ METRIC_PATTERNS = [
     ("scope1_mtco2e", [
         rf"scope\s*1[^\d]{{0,60}}{NUM}\s*(?:million\s+|thousand\s+)?"
         r"(?:metric\s+)?(?:tons?|mt|kt)\s*(?:of\s+)?co2e?",
+        rf"scope\s*1[^\d]{{0,60}}{NUM}\s*(?:m|k|t)?t?co[₂2]e\b",
         rf"scope\s*1\s*(?:ghg\s+)?emissions?[^\d]{{0,40}}{NUM}",
     ], "tco2e"),
     ("scope2_loc_mtco2e", [
@@ -48,9 +52,12 @@ METRIC_PATTERNS = [
     ("scope3_mtco2e", [
         rf"scope\s*3[^\d]{{0,60}}{NUM}\s*(?:million\s+|thousand\s+)?"
         r"(?:metric\s+)?(?:tons?|mt|kt)\s*(?:of\s+)?co2e?",
+        rf"scope\s*3[^\d]{{0,60}}{NUM}\s*(?:m|k|t)?t?co[₂2]e\b",
     ], "tco2e"),
     ("energy_mwh", [
         rf"total\s+(?:energy|electricity)[^\d]{{0,40}}{NUM}\s*(mwh|gwh|twh)",
+        rf"total\s+(?:energy|electricity)\s+(?:consumption|use)[^\d]{{0,40}}"
+        rf"{NUM}\s*(gj|tj|mmbtu)",
     ], "mwh"),
     ("renewable_pct", [
         rf"{NUM}\s*%\s*(?:of\s+(?:total\s+)?(?:energy|electricity)\s+)"
@@ -82,7 +89,9 @@ METRIC_PATTERNS = [
 
 UNIT_SCALE = {
     "gwh": 1e3, "twh": 1e6, "million": 1e6, "thousand": 1e3,
-    "billion": 1e9, "kt": 1e3,
+    "billion": 1e9, "kt": 1e3, "mtco2e": 1e6, "mt co2e": 1e6,
+    "tj": 277.78, "gj": 0.27778, "mmbtu": 0.29307, "mj": 0.00027778,
+    "megalit": 1e3, "km3": 1e6,
 }
 
 
@@ -118,14 +127,15 @@ UNITS = (
     r"(?:(?:million|thousand|billion)\s+)?(?:metric\s+)?"
     r"(?:tonnes?|tons?|mt|kt|t)\s*(?:of\s+)?"
     r"(?:co2e?|carbon(?:\s+dioxide)?(?:\s+equivalent)?|ghg)?|"
-    r"(?:mwh|gwh|twh|kwh|megajoules?|gj|mj|mmbtu)|"
-    r"(?:m3|cubic\s+met(?:er|re)s?|megalit(?:er|re)s?|lit(?:er|re)s?)|"
+    r"(?:t|mt|kt|kg)\s*co[₂2]e?\b|"  # compact forms: tco2e, mtco2e, kgco2e
+    r"(?:mwh|gwh|twh|kwh|megajoules?|gj|mj|mmbtu|tj|pj)|"
+    r"(?:m3|m³|cubic\s+met(?:er|re)s?|megalit(?:er|re)s?|lit(?:er|re)s?|km3)|"
     r"(?:%|percent|per\s+cent)|"
     r"(?:g|kg|t)\s*co[₂2]e?/(?:boe|mj|gj)")
 # unit families a metric may be drawn from — the number's actual unit must
 # be in the metric's family, so "30% of energy use" can't become energy_mwh
-_MASS = r"tonnes?|tons?|mt|kt|t\b"
-_ENERGY = r"mwh|gwh|twh|kwh|megajoules?|gj|mj\b|mmbtu"
+_MASS = r"tonnes?|tons?|mt|kt|t\b|co[₂2]e?\b"
+_ENERGY = r"mwh|gwh|twh|kwh|megajoules?|gj|mj\b|mmbtu|tj\b|pj\b"
 _VOL = r"m3|cubic|megalit|lit(?:er|re)"
 _PCT = r"%|percent|per\s+cent"
 CTX_RULES = [
@@ -208,6 +218,14 @@ def _plumber(pdf_path):
     return _PLUMBER["pdf"]
 
 
+class _TableTooSlow(Exception):
+    pass
+
+
+def _on_alarm(*_):
+    raise _TableTooSlow()
+
+
 def table_extract(pdf_path, page_no):
     """Deterministic table tier: pdfplumber rows carrying a metric label
     plus a number+unit cell. Cells are verbatim — higher precision than LLM."""
@@ -215,7 +233,17 @@ def table_extract(pdf_path, page_no):
         pdf = _plumber(pdf_path)
         if page_no < 1 or page_no > len(pdf.pages):
             return []
-        tables = pdf.pages[page_no - 1].extract_tables()
+        # pathological dense pages can take minutes inside pdfminer —
+        # bound it; the LLM tier is the recall net for what this misses
+        main_thread = threading.current_thread() is threading.main_thread()
+        if main_thread:
+            signal.signal(signal.SIGALRM, _on_alarm)
+            signal.alarm(20)
+        try:
+            tables = pdf.pages[page_no - 1].extract_tables()
+        finally:
+            if main_thread:
+                signal.alarm(0)
     except Exception:
         return []
     out, seen = [], set()
@@ -441,8 +469,12 @@ def llm_extract(text):
     if not gw_up():
         return None
     out = gw_chat(json_mode=True, messages=[{"role": "user",
-                    "content": LLM_PROMPT.replace("{text}", text[:12000])}])
+                    "content": LLM_PROMPT.replace("{text}", text[:8000])}])
     if out is None:
+        return None
+    # truncated responses (max_tokens hit) fail json parse and would mark
+    # the job llm_done with partial/zero items — treat as a failed call
+    if not out.rstrip().endswith("]"):
         return None
     return [it for it in extract_json_list(out)
             if isinstance(it, dict) and it.get("metric")]
@@ -452,13 +484,16 @@ def llm_extract_batch(texts):
     """One call for N pages; items carry a 1-indexed 'page' field."""
     if not gw_up():
         return None
-    pages = "\n".join(f"---PAGE {i + 1}---\n{t[:4000]}"
+    pages = "\n".join(f"---PAGE {i + 1}---\n{t[:2500]}"
                       for i, t in enumerate(texts))
-    out = gw_chat(json_mode=True, messages=[{"role": "user",
+    out = gw_chat(json_mode=True, max_tokens=3072,
+                  messages=[{"role": "user",
                   "content": BATCH_PROMPT.replace("{n}", str(len(texts)))
                   .replace("{pages}", pages)}])
     if out is None:
         return None
+    if not out.rstrip().endswith("]"):
+        return None  # truncated mid-JSON — never mark jobs done on partials
     return [it for it in extract_json_list(out)
             if isinstance(it, dict) and it.get("metric")]
 
@@ -537,14 +572,51 @@ def process_job(con, job, no_docling=False):
     return inserted
 
 
+_GW_FAIL = object()  # gateway call failed — job must stay pending_llm,
+                     # NEVER marked llm_done (was silently losing data when
+                     # batch prompts overflowed the server's per-slot ctx)
+
+_TL = threading.local()
+
+
+def _cache_con():
+    """Per-thread sqlite con for the page-text dedup cache — identical page
+    text yields identical gated items (verbatim snippets, so the echo-gate
+    invariant is preserved by construction). Cuts LLM call volume heavily:
+    ESG boilerplate (methodology, GRI index, assurance) repeats across
+    thousands of reports."""
+    c = getattr(_TL, "con", None)
+    if c is None:
+        c = db()
+        c.execute("PRAGMA busy_timeout=120000")
+        _TL.con = c
+    return c
+
+
 def llm_work(job):
     """Worker: read text + gateway call only (no sqlite — threads can't share
     the connection). Returns (job_id, payload, gated_items)."""
     p = json.loads(job["payload"])
     text = _page_text(p)
     if text is None:
-        return job["id"], p, None
-    return job["id"], p, _gate_items(llm_extract(text) or [], text)
+        return job["id"], p, []
+    ccon = _cache_con()
+    sha = hashlib.sha256(text.encode()).hexdigest()
+    row = ccon.execute("SELECT items FROM llm_cache WHERE text_sha=?",
+                       (sha,)).fetchone()
+    if row is not None:
+        return job["id"], p, json.loads(row[0])
+    rows = llm_extract(text)
+    if rows is None:
+        return job["id"], p, _GW_FAIL
+    items = _gate_items(rows, text)
+    try:
+        ccon.execute("INSERT OR IGNORE INTO llm_cache VALUES(?,?)",
+                     (sha, json.dumps(items)))
+        ccon.commit()
+    except Exception:
+        pass
+    return job["id"], p, items
 
 
 def _page_text(p):
@@ -578,28 +650,49 @@ def _gate_items(llm_rows, text):
 
 
 def llm_work_batch(jobs):
-    """One gateway call for a batch of pages; items routed back by 'page'
-    field and verified per page (misattributed snippets fail that page's
-    echo gate -> recall loss only, never precision)."""
+    """One gateway call for a batch of UNSEEN page texts; texts already in
+    llm_cache reuse their stored items (identical source -> identical
+    verbatim snippets -> echo-gate still passes). Returns _GW_FAIL when the
+    call itself failed — callers must leave those jobs pending_llm, never
+    mark them done. Items route back by 'page' field and verify per page
+    (misattributed snippets fail that page's gate -> recall loss only)."""
     parts = [(job, json.loads(job["payload"])) for job in jobs]
     texts = [_page_text(p) for _, p in parts]
     results = [(job["id"], p, []) for (job, p) in parts]
     live = [i for i, t in enumerate(texts) if t]
-    rows = llm_extract_batch([texts[i] for i in live])
-    if not rows:
+    ccon = _cache_con()
+    missing = []
+    for i in live:
+        sha = hashlib.sha256(texts[i].encode()).hexdigest()
+        row = ccon.execute("SELECT items FROM llm_cache WHERE text_sha=?",
+                           (sha,)).fetchone()
+        if row is None:
+            missing.append((i, sha))
+        else:
+            results[i] = (parts[i][0]["id"], parts[i][1],
+                          json.loads(row[0]))
+    if not missing:
         return results
-    per = {i: [] for i in range(len(jobs))}
+    rows = llm_extract_batch([texts[i] for i, _ in missing])
+    if rows is None:
+        return _GW_FAIL
+    per = {pos: [] for pos in range(len(missing))}
     for it in rows:
         try:
             pi = int(it.get("page", 0)) - 1
         except (TypeError, ValueError):
             continue
-        slot = live[pi] if 0 <= pi < len(live) else None
-        if slot is not None:
-            per[slot].append(it)
-    for i, (job, p) in enumerate(parts):
-        if texts[i]:
-            results[i] = (job["id"], p, _gate_items(per[i], texts[i]))
+        if 0 <= pi < len(missing):
+            per[pi].append(it)
+    for pos, (i, sha) in enumerate(missing):
+        gated = _gate_items(per[pos], texts[i])
+        try:
+            ccon.execute("INSERT OR IGNORE INTO llm_cache VALUES(?,?)",
+                         (sha, json.dumps(gated)))
+            ccon.commit()
+        except Exception:
+            pass
+        results[i] = (parts[i][0]["id"], parts[i][1], gated)
     return results
 
 
@@ -622,6 +715,74 @@ def llm_insert(con, job_id, p, items):
     return n
 
 
+def _bump_llm_tries(con, job_ids):
+    """Gateway failed mid-batch — don't mark jobs done (silent data loss),
+    but bound retries so a permanently-too-big page can't loop forever."""
+    for jid in job_ids:
+        con.execute(
+            """UPDATE jobs SET payload=json_set(payload,'$.llm_tries',
+               COALESCE(json_extract(payload,'$.llm_tries'),0)+1)
+               WHERE id=?""", (jid,))
+    con.commit()
+
+
+def _llm_pass(con, a, shard, order, limit=0):
+    """One bounded LLM round over pending_llm jobs. Returns jobs processed
+    (0 = queue empty, -1 = gateway down). Called repeatedly by --drain-llm
+    so the GPU tier overlaps pass-1 instead of waiting for a full sweep."""
+    q2 = ("SELECT id, payload FROM jobs WHERE kind='extract' AND "
+          "status='pending_llm' AND "
+          "COALESCE(json_extract(payload,'$.llm_tries'),0) < 3"
+          f"{shard}{order}")
+    if a.llm:
+        q2 = ("SELECT id, payload FROM jobs WHERE kind='extract' AND "
+              f"status IN ('pending_llm','regex_done'){shard}{order}")
+    q2 += f" LIMIT {limit or a.llm_workers * max(a.batch, 1) * 8}"
+    jobs = con.execute(q2).fetchall()
+    if not jobs:
+        return 0
+    if not gw_up():
+        print(f"gateway down — {len(jobs)} pages stay pending_llm")
+        return -1
+    from concurrent.futures import ThreadPoolExecutor
+    total2 = 0
+    with ThreadPoolExecutor(max_workers=a.llm_workers) as ex:
+        if a.batch and a.batch > 1:
+            chunks = [jobs[i:i + a.batch]
+                      for i in range(0, len(jobs), a.batch)]
+            for chunk, results in zip(chunks,
+                                      ex.map(llm_work_batch, chunks)):
+                if results is _GW_FAIL:
+                    _bump_llm_tries(con, [j["id"] for j in chunk])
+                    continue
+                for job_id, p, items in results:
+                    total2 += _lock_retry(
+                        lambda: llm_insert(con, job_id, p, items))
+        else:
+            for job_id, p, items in ex.map(llm_work, jobs):
+                if items is _GW_FAIL:
+                    _bump_llm_tries(con, [job_id])
+                    continue
+                total2 += _lock_retry(
+                    lambda: llm_insert(con, job_id, p, items))
+    print(f"extract llm: {total2} metrics on {len(jobs)} pages", flush=True)
+    return len(jobs)
+
+
+def _drain_llm(con, a, shard, order):
+    """Continuous pending_llm drain — a dedicated lane that keeps the
+    gateway busy while pass-1 shards are still sweeping. Idles 60s when
+    the queue is empty; exits after 3 idle rounds (supervisor relaunches)."""
+    idle = 0
+    while idle < 3:
+        n = _llm_pass(con, a, shard, order)
+        if n <= 0:
+            idle += 1
+            time.sleep(60)
+        else:
+            idle = 0
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--limit", type=int, default=0)
@@ -635,55 +796,50 @@ def main():
                     help="skip the CPU-docling tier (slow on lanes; LLM "
                     "tier covers those pages)")
     ap.add_argument("--shard", type=int, nargs=2, metavar=("K", "N"),
-                    help="process only jobs where id %% N = K — disjoint "
-                    "shards parallelize pass-1 with no claim protocol")
+                    help="process only jobs where report_id %% N = K — "
+                    "disjoint shards parallelize with no claim protocol")
+    ap.add_argument("--drain-llm", action="store_true",
+                    help="skip pass-1 entirely; loop the LLM tier over "
+                    "pending_llm until it stays empty (dedicated lane)")
     a = ap.parse_args()
     con = db()
     con.execute("PRAGMA busy_timeout=120000")
+    con.execute("CREATE TABLE IF NOT EXISTS llm_cache"
+                "(text_sha TEXT PRIMARY KEY, items TEXT)")
+    con.commit()
     # shard by report_id (not job id): keeps every page of a report in the
     # same shard so the one-entry pdfplumber/fitz caches actually hit;
-    # ordering by report first makes same-report jobs contiguous.
+    # report DESC = newest-cataloged first (breadth coverage lands early).
     rid = "json_extract(payload,'$.report_id')"
     shard = f" AND {rid} % {a.shard[1]} = {a.shard[0]}" if a.shard else ""
-    order = f" ORDER BY {rid}, id" if a.shard else " ORDER BY id"
-    # pass 1: regex + context tiers on pending and previously-LLM-queued pages
+    order = f" ORDER BY {rid} DESC, id" if a.shard else " ORDER BY id"
+    if a.drain_llm:
+        _drain_llm(con, a, shard, order)
+        return
+    # pass 1: regex + context tiers on pending and previously-LLM-queued
+    # pages. Chunked re-query (not a fetchall snapshot) so jobs enqueued
+    # by pages/figures mid-run get picked up without a relaunch.
     q = ("SELECT id, payload FROM jobs WHERE kind='extract' AND "
-         f"status IN ('pending','pending_llm'){shard}{order}")
-    if a.limit:
-        q += f" LIMIT {a.limit}"
+         f"status IN ('pending','pending_llm'){shard}{order} LIMIT 800")
     total = 0
-    for job in con.execute(q).fetchall():
-        total += _lock_retry(lambda: process_job(con, job, a.no_docling))
-    print(f"extract regex: {total} metrics")
-    # pass 2: LLM only where regex missed (or on all done pages if --llm),
-    # parallel across the gateway's slots
-    q2 = ("SELECT id, payload FROM jobs WHERE kind='extract' AND "
-          f"status='pending_llm'{shard}{order}")
-    if a.llm:
-        q2 = ("SELECT id, payload FROM jobs WHERE kind='extract' AND "
-              f"status IN ('pending_llm','regex_done'){shard}{order}")
-    if a.limit:
-        q2 += f" LIMIT {a.limit}"
-    jobs = con.execute(q2).fetchall()
-    if jobs and gw_up():
-        from concurrent.futures import ThreadPoolExecutor
-        total2 = 0
-        with ThreadPoolExecutor(max_workers=a.llm_workers) as ex:
-            if a.batch and a.batch > 1:
-                chunks = [jobs[i:i + a.batch]
-                          for i in range(0, len(jobs), a.batch)]
-                for results in ex.map(llm_work_batch, chunks):
-                    for job_id, p, items in results:
-                        total2 += _lock_retry(
-                            lambda: llm_insert(con, job_id, p, items))
-            else:
-                for job_id, p, items in ex.map(llm_work, jobs):
-                    total2 += _lock_retry(
-                        lambda: llm_insert(con, job_id, p, items))
-        print(f"extract llm: {total2} metrics on {len(jobs)} pages")
-        total += total2
-    elif jobs:
-        print(f"gateway down — {len(jobs)} pages stay pending_llm")
+    rounds = 0
+    while True:
+        fetched = con.execute(q).fetchall()
+        if not fetched or rounds >= (1 if a.limit else 10**9):
+            break
+        rounds += 1
+        for job in fetched:
+            total += _lock_retry(
+                lambda: process_job(con, job, a.no_docling))
+    print(f"extract regex: {total} metrics", flush=True)
+    # pass 2: manual/oneshot runs drain the whole pending_llm queue here;
+    # lane runs get the same coverage from the dedicated --drain-llm lane
+    total2 = 0
+    while True:
+        n = _llm_pass(con, a, shard, order, limit=a.limit)
+        if n <= 0:
+            break
+        total2 += n
     print(f"extract: {total} metrics inserted")
     con.execute(
         "INSERT OR REPLACE INTO source_snapshots VALUES('extract',?,?,?,?)",

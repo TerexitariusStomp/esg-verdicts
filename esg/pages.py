@@ -73,14 +73,20 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--report", type=int, default=0)
+    ap.add_argument("--shard", type=int, nargs=2, metavar=("K", "N"),
+                    help="process reports where id %% N = K — sharded "
+                    "lanes keep pace with multi-k/hr harvest inflow")
     a = ap.parse_args()
     con = db()
     q = ("SELECT id, path FROM reports WHERE sha256 IS NOT NULL AND "
          "(pages IS NULL OR pages=0)")
     if a.report:
         q = f"SELECT id, path FROM reports WHERE id={a.report}"
-    elif a.limit:
-        q += f" LIMIT {a.limit}"
+    else:
+        if a.shard:
+            q += f" AND id % {a.shard[1]} = {a.shard[0]}"
+        if a.limit:
+            q += f" LIMIT {a.limit}"
     total_p = total_c = 0
     for r in con.execute(q).fetchall():
         try:

@@ -146,16 +146,21 @@ def fetch_one(r, proxy, retries=4):
     return r["id"], status, b""
 
 
-def fetch_wayback(r, pace, timeout=90):
+def fetch_wayback(r, pace, timeout=90, proxy=None):
     """Wayback first: IA serves archived RR PDFs at multi-MB/s without
     touching RR's rate-limiting edge. '2' = latest capture, 'id_' = raw
     bytes (no toolbar rewrite). A 404 means 'not archived' — the caller
     must NOT treat it as a failed fetch; the Tor lane still owns the row.
     pace = shared _Pace (AIMD): IA soft-bans bursty IPs even at low worker
-    counts, so the rate self-tunes instead of holding a guessed constant."""
+    counts, so the rate self-tunes instead of holding a guessed constant.
+    proxy=ESG_PROXY sends the fetch through Tor exits — per-exit rates stay
+    polite while aggregate throughput scales with worker count; a refused
+    or stalled circuit triggers NEWNYM like the RR lane."""
     time.sleep(pace.v)
     status, body, rc, elapsed = curl_fetch(
-        WB + r["url"], proxy=None, timeout=timeout)
+        WB + r["url"], proxy=proxy, timeout=timeout)
+    if proxy and (status in (403, 429, 503) or rc != 0 or elapsed > 90):
+        _nym()  # bad exit or IA throttling this circuit — rotate
     return r["id"], status, body
 
 
@@ -175,14 +180,17 @@ def _write_locked(con, sql, params, tries=8):
     return False
 
 
-def run_wayback(con, limit=0, workers=3):
+def run_wayback(con, limit=0, workers=3, tor=False):
     from concurrent.futures import ThreadPoolExecutor, as_completed
     rows = pending_wayback(con, limit)
     con.execute("PRAGMA busy_timeout=120000")
-    pace = _Pace(float(os.environ.get("ESG_WB_PACE", "1.5")))
+    proxy = os.environ.get("ESG_PROXY") if tor else None
+    pace = _Pace(float(os.environ.get(
+        "ESG_WB_PACE", "0.6" if tor else "1.5")))
     ok = zero_run = 0
     with ThreadPoolExecutor(max_workers=workers) as ex:
-        futs = {ex.submit(fetch_wayback, r, pace): r for r in rows}
+        futs = {ex.submit(fetch_wayback, r, pace, proxy=proxy): r
+                for r in rows}
         for i, fut in enumerate(as_completed(futs), 1):
             rid, status, body = fut.result()
             # IA soft-bans aggressive IPs with conn-refused (0) or 429 —
@@ -359,6 +367,75 @@ def run_commoncrawl(con, limit=0, workers=2):
     return ok, i - ok if rows else 0
 
 
+# --- Save Page Now lane ----------------------------------------------------
+# For RR PDFs archived NOWHERE (wb_miss): ask IA to capture the URL itself —
+# IA's crawler fetches RR, we later pull the fresh capture via replay, and
+# RR's edge sees zero traffic from us. Anonymous SPN is tight (~1/30s and
+# daily caps), so this trims the tail rather than replacing the Tor lane.
+SPN = "https://web.archive.org/save/"
+
+
+def pending_spn(con, limit=0):
+    """wb_miss rows not yet SPN-requested twice. The wayback lane excludes
+    wb_miss rows — after an SPN request lands we delete the marker so the
+    wayback lane retries the row once the capture has propagated; a
+    re-miss loops back here (bounded by tries<2)."""
+    q = """SELECT r.id, r.url FROM reports r
+           WHERE r.sha256 IS NULL
+             AND r.url LIKE '%responsibilityreports.com/HostedData/%.pdf'
+             AND r.id IN (
+               SELECT CAST(json_extract(payload,'$.report_id') AS INT)
+               FROM jobs WHERE kind='harvest' AND status='wb_miss')
+             AND COALESCE((
+               SELECT MAX(CAST(json_extract(s.payload,'$.tries') AS INT))
+               FROM jobs s WHERE s.kind='harvest' AND s.status='spn_req'
+                 AND CAST(json_extract(s.payload,'$.report_id') AS INT)=r.id
+              ),0) < 2
+           ORDER BY r.id DESC"""
+    if limit:
+        q += f" LIMIT {limit}"
+    return con.execute(q).fetchall()
+
+
+def run_spn(con, limit=0, pace_s=35):
+    rows = pending_spn(con, limit or 150)
+    con.execute("PRAGMA busy_timeout=120000")
+    ok = 0
+    for i, r in enumerate(rows, 1):
+        tries = con.execute(
+            """SELECT COALESCE(MAX(CAST(json_extract(payload,'$.tries')
+               AS INT)),0) FROM jobs WHERE kind='harvest'
+               AND status='spn_req'
+               AND CAST(json_extract(payload,'$.report_id') AS INT)=?""",
+            (r["id"],)).fetchone()[0]
+        status, _, rc, _ = curl_fetch(SPN + r["url"], timeout=120)
+        if status in (200, 301, 302) or status == 0 and rc == 28:
+            # 200 = captured now; 3xx = capture queued; a curl timeout on
+            # /save/ can still mean IA accepted the job server-side
+            _write_locked(
+                con,
+                "INSERT INTO jobs(kind,status,payload) VALUES(?,?,?)",
+                ("harvest", "spn_req",
+                 f'{{"report_id":{r["id"]},"tries":{tries + 1}}}'))
+            _write_locked(
+                con,
+                "DELETE FROM jobs WHERE kind='harvest' AND "
+                "status='wb_miss' AND "
+                "CAST(json_extract(payload,'$.report_id') AS INT)=?",
+                (r["id"],))
+            ok += 1
+        elif status in (429, 403, 503):
+            print(f"spn: refused ({status}) — backing off 15min",
+                  flush=True)
+            time.sleep(900)
+        if i % 20 == 0:
+            print(f"spn: {ok} requested ({i}/{len(rows)})", flush=True)
+        time.sleep(pace_s)
+    print(f"spn: {ok} capture requests ({len(rows)} candidates)",
+          flush=True)
+    return ok
+
+
 def run(con, limit=0, workers=4):
     from concurrent.futures import ThreadPoolExecutor, as_completed
     proxy = os.environ.get("ESG_PROXY")
@@ -372,25 +449,27 @@ def run(con, limit=0, workers=4):
             if status == 200:
                 try:
                     path, sha = sha256_store_put(body)
-                    con.execute(
+                    _write_locked(
+                        con,
                         """UPDATE reports SET sha256=?, path=?, fetched_at=?,
                            acquired_at=?, acquisition_method=? WHERE id=?""",
                         (sha, path, now(), now(),
                          "tor_tunnel" if proxy else "http_get", rid))
                     ok += 1
                 except ValueError:
-                    con.execute(
+                    _write_locked(
+                        con,
                         "INSERT OR REPLACE INTO jobs(kind,status,payload) "
                         "VALUES(?,?,?)",
                         ("harvest", "bad_pdf", f'{{"report_id":{rid}}}'))
             else:
                 fail += 1
-                con.execute(
+                _write_locked(
+                    con,
                     "INSERT OR REPLACE INTO jobs(kind,status,payload) "
                     "VALUES(?,?,?)",
                     ("harvest", "failed",
                      f'{{"report_id":{rid},"status":{status}}}'))
-            con.commit()
             if i % 20 == 0:
                 print(f"harvest: {ok} ok, {fail} failed ({i}/{len(rows)})")
     return ok, fail
@@ -403,13 +482,21 @@ def main():
                     help="concurrent curl lanes")
     ap.add_argument("--wayback", action="store_true",
                     help="fetch RR PDFs via Wayback Machine (no proxy)")
+    ap.add_argument("--wayback-tor", action="store_true",
+                    help="wayback fetches through Tor exits — per-exit "
+                    "politeness with aggregate throughput; NEWNYM on "
+                    "throttled/stalled circuits")
+    ap.add_argument("--spn", action="store_true",
+                    help="ask IA Save Page Now to capture wb_miss RR PDFs")
     ap.add_argument("--commoncrawl", action="store_true",
                     help="fetch RR PDFs via Common Crawl WARC (no proxy)")
     a = ap.parse_args()
     con = db()
-    if a.wayback:
-        ok, miss = run_wayback(con, a.limit, a.workers)
+    if a.wayback or a.wayback_tor:
+        ok, miss = run_wayback(con, a.limit, a.workers, tor=a.wayback_tor)
         print(f"wayback: {ok} fetched, {miss} not-archived")
+    elif a.spn:
+        run_spn(con, a.limit)
     elif a.commoncrawl:
         ok, miss = run_commoncrawl(con, a.limit, a.workers)
         print(f"commoncrawl: {ok} fetched, {miss} miss")
