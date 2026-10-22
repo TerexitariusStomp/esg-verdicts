@@ -25,12 +25,20 @@ def export_exhibits(con):
         """SELECT id, company_id, url, sha256, path, acquired_at,
                   acquisition_method FROM reports WHERE sha256 IS NOT NULL
            ORDER BY id""").fetchall()
+    # wayback fallback: /web/2id_/ redirects to the nearest capture when
+    # one exists — offered on every report we have NOT confirmed missing
+    # (wb_miss = IA definitively lacks it, so no link emitted there)
+    wb_missing = {json.loads(r[0])["report_id"] for r in con.execute(
+        """SELECT payload FROM jobs WHERE kind='harvest'
+           AND status='wb_miss'""").fetchall()}
     out = []
     for i, r in enumerate(rows, 1):
         out.append({
             "exhibit_id": f"EX-{i:04d}", "kind": "report_pdf",
             "company_id": r["company_id"], "sha256": r["sha256"],
             "source_url": r["url"], "path": r["path"],
+            "wayback_url": ("" if r["id"] in wb_missing else
+                            "https://web.archive.org/web/2id_/" + r["url"]),
             "acquired_at": r["acquired_at"] or "",
             "acquisition_method": r["acquisition_method"] or "http_get",
             "posture": "documented"})
