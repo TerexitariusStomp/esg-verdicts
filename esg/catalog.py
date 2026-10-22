@@ -23,6 +23,7 @@ from scrapy.crawler import CrawlerProcess
 from .esg import db, now
 
 BASE = "https://www.responsibilityreports.com"
+AR_BASE = "https://www.annualreports.com"
 PDF_RE = re.compile(r"HostedData/[^\"']+?(\d{4})\.pdf", re.I)
 UA = {"User-Agent": "esg-verdicts/1.0 research crawler"}
 
@@ -44,11 +45,14 @@ def _norm(s):
     return re.sub(r"[^a-z0-9]", "", s)
 
 
-def index(con):
-    """Full /Companies index -> slug_map + match to companies by name."""
+def _index(con, base, source, cache):
+    """Full /Companies index -> slug_map + match to companies by name.
+    Parameterized per source — responsibilityreports and annualreports
+    share the same operator/layout (/Companies + /Company/<slug> +
+    HostedData PDF links)."""
     os.makedirs("data/source", exist_ok=True)
-    html = fetch(BASE + "/Companies")
-    with open("data/source/rr_companies.html", "wb") as f:
+    html = fetch(base + "/Companies")
+    with open(f"data/source/{cache}", "wb") as f:
         f.write(html)
     sel = scrapy.Selector(text=html.decode("utf-8", "ignore"))
     links = sel.css('a[href^="/Company/"]')
@@ -71,17 +75,25 @@ def index(con):
                 if best and fuzz.ratio(_norm(best[1]), n) >= 88:
                     cid = best[0]
         con.execute(
-            "INSERT OR REPLACE INTO slug_map VALUES('responsibilityreports',?,?)",
-            (slug, cid))
+            "INSERT OR REPLACE INTO slug_map VALUES(?,?,?)",
+            (source, slug, cid))
         n_new += 1
     con.commit()
     con.execute(
-        "INSERT OR REPLACE INTO source_snapshots VALUES('responsibilityreports',?,?,?,?)",
-        (now(), "", 7, n_new))
+        "INSERT OR REPLACE INTO source_snapshots VALUES(?,?,?,?,?)",
+        (source, now(), "", 7, n_new))
     con.commit()
-    print(f"index: {n_new} slugs, "
+    print(f"{source} index: {n_new} slugs, "
           f"{con.execute('SELECT COUNT(*) FROM slug_map WHERE company_id IS NOT NULL').fetchone()[0]} matched")
     return n_new
+
+
+def index(con):
+    return _index(con, BASE, "responsibilityreports", "rr_companies.html")
+
+
+def index_ar(con):
+    return _index(con, AR_BASE, "annualreports", "ar_companies.html")
 
 
 _HEAVY = re.compile(
@@ -92,16 +104,17 @@ _HEAVY = re.compile(
 _FIN = re.compile(r"bank|insur|financial", re.I)
 
 
-def stubify(con):
-    """Create stub companies for every unmatched slug so all 4,409
-    responsibilityreports issuers get coverage (private/foreign issuers
-    like Nestlé are often big emitters). Names come from the cached
-    /Companies index page — no re-fetch. Idempotent."""
+def stubify(con, source="responsibilityreports",
+            cache="data/source/rr_companies.html"):
+    """Create stub companies for every unmatched slug so all issuers get
+    coverage (private/foreign issuers like Nestlé are often big emitters).
+    Names come from the cached /Companies index page — no re-fetch.
+    Idempotent."""
     import scrapy
     try:
-        html = open("data/source/rr_companies.html", "rb").read()
+        html = open(cache, "rb").read()
     except OSError:
-        print("stubify: no cached index — run `catalog index` first")
+        print(f"stubify: no cached index for {source} — run index first")
         return 0
     sel = scrapy.Selector(text=html.decode("utf-8", "ignore"))
     disp = {}
@@ -110,8 +123,8 @@ def stubify(con):
         disp[slug] = (a.css("::text").get("") or "").strip()
     n = 0
     for (slug,) in con.execute(
-            "SELECT slug FROM slug_map WHERE source='responsibilityreports'"
-            " AND company_id IS NULL").fetchall():
+            "SELECT slug FROM slug_map WHERE source=?"
+            " AND company_id IS NULL", (source,)).fetchall():
         name = disp.get(slug) or slug.replace("-", " ").title()
         pri = 300 if _HEAVY.search(name) else (
             100 if _FIN.search(name) else 0)
@@ -120,7 +133,7 @@ def stubify(con):
             (name, pri))
         con.execute(
             "UPDATE slug_map SET company_id=? WHERE slug=? AND "
-            "source='responsibilityreports'", (cur.lastrowid, slug))
+            "source=?", (cur.lastrowid, slug, source))
         n += 1
     # reports cataloged under NULL company can't be re-mapped (URLs carry
     # no slug); drop them + their dependent jobs — re-crawl re-catalogs
@@ -148,6 +161,10 @@ def stubify(con):
 
 class RRSpider(scrapy.Spider):
     name = "rr_company"
+    # parameterized per source — same operator/layout for both catalogs
+    SOURCE = "responsibilityreports"
+    BASE_URL = BASE
+    KIND = "sustainability_report"
     custom_settings = {
         "CONCURRENT_REQUESTS": 8,
         "AUTOTHROTTLE_ENABLED": True,
@@ -165,14 +182,18 @@ class RRSpider(scrapy.Spider):
     async def start(self):
         con = db()
         proxy = os.environ.get("ESG_PROXY")
-        done = {json.loads(r["payload"]).get("slug") for r in con.execute(
-            "SELECT payload FROM jobs WHERE kind='catalog' AND "
-            "status='done'").fetchall()}
+        done = {json.loads(r["payload"]).get("slug")
+                for r in con.execute(
+                    "SELECT payload FROM jobs WHERE kind='catalog' AND "
+                    "status='done'").fetchall()
+                if json.loads(r["payload"]).get(
+                    "source", "responsibilityreports") == self.SOURCE}
         rows = con.execute(
             """SELECT s.slug, s.company_id, c.priority FROM slug_map s
                LEFT JOIN companies c ON c.id = s.company_id
-               WHERE s.source='responsibilityreports'
-               ORDER BY COALESCE(c.priority,0) DESC, s.slug""").fetchall()
+               WHERE s.source=?
+               ORDER BY COALESCE(c.priority,0) DESC, s.slug""",
+            (self.SOURCE,)).fetchall()
         rows = [r for r in rows if r["slug"] not in done]
         if self.shard_n > 1:
             rows = rows[self.shard_m:: self.shard_n]
@@ -185,7 +206,7 @@ class RRSpider(scrapy.Spider):
                 meta["proxy"] = proxy
             # higher priority -> earlier (scrapy priority: higher first)
             yield scrapy.Request(
-                f"{BASE}/Company/{r['slug']}", meta=meta,
+                f"{self.BASE_URL}/Company/{r['slug']}", meta=meta,
                 priority=int(r["priority"] or 0) + 1,
                 callback=self.parse)
 
@@ -195,40 +216,70 @@ class RRSpider(scrapy.Spider):
         cid = response.meta["company_id"]
         found = 0
         for m in PDF_RE.finditer(response.text):
-            url = BASE + "/" + m.group(0)
+            url = self.BASE_URL + "/" + m.group(0)
             year = int(m.group(1))
             con.execute(
                 """INSERT OR IGNORE INTO reports
                    (company_id, year, kind, url, acquisition_method)
                    VALUES(?,?,?,?,?)""",
-                (cid, year, "sustainability_report", url, "scrape"))
+                (cid, year, self.KIND, url, "scrape"))
             found += 1
         # also record that we crawled this page
         con.execute(
             "INSERT OR REPLACE INTO jobs(kind,status,payload) VALUES(?,?,?)",
-            ("catalog", "done", json.dumps({"slug": slug, "found": found})))
+            ("catalog", "done",
+             json.dumps({"slug": slug, "source": self.SOURCE,
+                         "found": found})))
         con.commit()
         yield {"slug": slug, "company_id": cid, "reports": found}
 
 
-def crawl(limit=0, shard_n=1, shard_m=0):
+class ARSpider(RRSpider):
+    """annualreports.com — same operator/layout as RR but a different
+    catalog (annual reports, AnnualReportArchive) and an unthrottled edge.
+    ESG_PROXY unset for it: direct fetches measured 4.6MB/s."""
+    name = "ar_company"
+    SOURCE = "annualreports"
+    BASE_URL = AR_BASE
+    KIND = "annual_report"
+
+    async def start(self):
+        # direct fetch — AR's edge doesn't throttle like RR's
+        proxy = os.environ.pop("ESG_PROXY", None)
+        try:
+            async for req in super().start():
+                yield req
+        finally:
+            if proxy is not None:
+                os.environ["ESG_PROXY"] = proxy
+
+
+def crawl(limit=0, shard_n=1, shard_m=0, spider=RRSpider):
     p = CrawlerProcess()
-    p.crawl(RRSpider, limit=limit or 0, shard_n=shard_n, shard_m=shard_m)
+    p.crawl(spider, limit=limit or 0, shard_n=shard_n, shard_m=shard_m)
     p.start()
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("mode", nargs="?", default="index",
-                    choices=["index", "crawl", "stubify"])
+                    choices=["index", "crawl", "stubify",
+                             "ar-index", "ar-crawl", "ar-stubify"])
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--shard", type=int, nargs=2, default=[1, 0],
                     metavar=("N", "M"), help="crawl shard M of N")
-    a = parse_args = ap.parse_args()
+    a = ap.parse_args()
     if a.mode == "index":
         index(db())
     elif a.mode == "stubify":
         stubify(db())
+    elif a.mode == "ar-index":
+        index_ar(db())
+    elif a.mode == "ar-stubify":
+        stubify(db(), source="annualreports",
+                cache="data/source/ar_companies.html")
+    elif a.mode == "ar-crawl":
+        crawl(a.limit, a.shard[0], a.shard[1], spider=ARSpider)
     else:
         crawl(a.limit, a.shard[0], a.shard[1])
 

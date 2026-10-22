@@ -147,19 +147,33 @@ def pending_pdfs():
         return 9999
 
 
-def uncrawled_slugs():
-    """RR slugs not yet recorded as catalog-done — the coverage frontier."""
+def uncrawled_slugs(source="responsibilityreports"):
+    """Slugs not yet recorded as catalog-done — the coverage frontier.
+    source filters both slug_map and the done-marker payloads (AR done
+    jobs carry "source":"annualreports"; legacy RR jobs carry no source)."""
     try:
         con = sqlite3.connect(DB)
         total = con.execute(
-            "SELECT COUNT(*) FROM slug_map "
-            "WHERE source='responsibilityreports'").fetchone()[0]
+            "SELECT COUNT(*) FROM slug_map WHERE source=?",
+            (source,)).fetchone()[0]
         done = len({json.loads(r[0]).get("slug") for r in con.execute(
             "SELECT payload FROM jobs WHERE kind='catalog' "
-            "AND status='done'")})
+            "AND status='done'")
+            if json.loads(r[0]).get(
+                "source", "responsibilityreports") == source})
         return max(0, total - done)
     except Exception:
         return 1
+
+
+def _one_shot_done(kind):
+    try:
+        con = sqlite3.connect(DB)
+        return con.execute(
+            "SELECT COUNT(*) FROM jobs WHERE kind=? AND status='done'",
+            (kind,)).fetchone()[0] > 0
+    except Exception:
+        return True  # err toward not re-running a heavy one-shot
 
 
 def snapshot(tag):
@@ -210,12 +224,12 @@ while not os.path.exists(STOP):
         # catalog so newly-crawled reports join the breadth-first queue
         bg([PY, "-m", "esg.harvest", "--workers", "8", "--limit", "800"],
             "harvest.log")
-    # Wayback-through-Tor: ~72% of pending RR PDFs are archived; IA serves
-    # them at multi-MB/s and RR's edge sees zero load. 12 workers each
-    # pace their own circuit (~0.6s AIMD) — aggregate ~6-8 req/s spread
-    # across exits, NEWNYM on any throttled/stalled circuit.
+    # Wayback direct: ~72% of pending RR PDFs are archived; measured
+    # ~500/hr sustained direct vs ~17/hr through tor exits (tor bandwidth
+    # is the bottleneck, not IA). AIMD pace + breaker keep it polite;
+    # --wayback-tor remains in the code as an emergency fallback.
     if not disk_low and not running("esg.harvest .*wayback"):
-        bg([PY, "-m", "esg.harvest", "--wayback-tor", "--workers", "12",
+        bg([PY, "-m", "esg.harvest", "--wayback", "--workers", "4",
             "--limit", "6000"], "wayback.log")
     # Common Crawl lane: covers the wb_miss tail — index query then S3-speed
     # WARC range fetch, no proxy needed
@@ -227,6 +241,33 @@ while not os.path.exists(STOP):
     # RR sees zero load from us). Anonymous SPN is rate-tight, pace ~1/35s.
     if not disk_low and not running("esg.harvest .*--spn"):
         bg([PY, "-m", "esg.harvest", "--spn", "--limit", "150"], "spn.log")
+    # issuer-direct lane: DataNeed/annualreports rows fetch straight from
+    # issuer domains — thousands of independent hosts, no shared throttle.
+    # Ordered RR-backlog-companies-first so it fills the existing tail.
+    if not disk_low and not running("esg.harvest .*--issuer"):
+        bg([PY, "-m", "esg.harvest", "--issuer", "--workers", "20",
+            "--limit", "5000"], "issuer.log")
+    # one-shot catalog expansions: DataNeed download+ingest (~2GB JSON,
+    # ~350k issuer URLs), then annualreports /Companies index + stubs
+    if not _one_shot_done("dataneed") and not running("esg.dataneed"):
+        seq(["-m", "esg.dataneed", "download"], "dataneed.log")
+        seq(["-m", "esg.dataneed", "ingest"], "dataneed.log")
+    try:
+        _con = sqlite3.connect(DB)
+        _ar_indexed = _con.execute(
+            "SELECT COUNT(*) FROM slug_map WHERE source='annualreports'"
+            ).fetchone()[0] > 0
+        _con.close()
+    except Exception:
+        _ar_indexed = True
+    if not _ar_indexed and not running("esg.catalog"):
+        seq(["-m", "esg.catalog", "ar-index"], "ar-index.log")
+        seq(["-m", "esg.catalog", "ar-stubify"], "ar-stubify.log")
+    elif uncrawled_slugs("annualreports") > 0:
+        for m in range(2):
+            if not running(f"catalog ar-crawl --shard 2 {m}"):
+                bg([PY, "-u", "-m", "esg.catalog", "ar-crawl",
+                    "--shard", "2", str(m)], f"ar-catalog{m}.log")
     # pages/figures as sharded lanes — single sequential stages can't keep
     # up with multi-k/hr PDF inflow; report_id % N keeps them disjoint
     for k in range(3):

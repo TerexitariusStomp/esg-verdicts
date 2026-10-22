@@ -77,9 +77,13 @@ def sha256_store_put(data):
 
 
 def pending(con, limit=0):
+    # Tor lane owns RR-hosted PDFs ONLY — issuer-hosted rows (dataneed
+    # catalog, annualreports) go through the direct --issuer lane; pulling
+    # thousands of foreign domains through tor exits is slow and pointless
     q = """SELECT r.id, r.url FROM reports r
            LEFT JOIN companies c ON c.id = r.company_id
-           WHERE r.sha256 IS NULL AND r.url LIKE '%.pdf'
+           WHERE r.sha256 IS NULL
+             AND r.url LIKE '%responsibilityreports.com/%.pdf'
            ORDER BY
              (SELECT COUNT(*) FROM reports r2
               WHERE r2.company_id IS r.company_id AND r2.url LIKE '%.pdf'
@@ -436,6 +440,115 @@ def run_spn(con, limit=0, pace_s=35):
     return ok
 
 
+# --- issuer-direct lane ----------------------------------------------------
+# DataNeed/annualreports rows carry issuer-hosted URLs across thousands of
+# independent domains — no shared throttle exists, so these fetch direct at
+# full parallelism. The ONLY rate limit is per-domain, and each domain sees
+# ~1 request per report lifetime.
+
+
+def pending_issuer(con, limit=0):
+    """Non-RR-hosted pending PDFs. Companies that still have RR-hosted rows
+    pending go first (fills the existing backlog tail fastest), then
+    breadth by report id."""
+    q = """SELECT r.id, r.url FROM reports r
+           WHERE r.sha256 IS NULL AND r.url LIKE '%.pdf'
+             AND r.url NOT LIKE '%responsibilityreports%'
+             AND r.id NOT IN (
+               SELECT CAST(json_extract(payload,'$.report_id') AS INT)
+               FROM jobs WHERE kind='harvest' AND status='issuer_miss')
+           ORDER BY
+             (r.company_id IN (
+               SELECT DISTINCT company_id FROM reports
+               WHERE sha256 IS NULL
+                 AND url LIKE '%responsibilityreports%')) DESC,
+             r.id"""
+    if limit:
+        q += f" LIMIT {limit}"
+    return con.execute(q).fetchall()
+
+
+def _commit_pdf(con, rid, body, method):
+    """Validate + store + mark fetched, deduping on content sha: if the same
+    bytes were already captured under another report row (RR copy vs issuer
+    copy), drop this row instead — provenance stays with the first fetch."""
+    path, sha = sha256_store_put(body)   # raises ValueError on non-PDF
+    dup = con.execute(
+        "SELECT id FROM reports WHERE sha256=? AND id<>?", (sha, rid)
+        ).fetchone()
+    if dup:
+        con.execute("DELETE FROM reports WHERE id=?", (rid,))
+        con.execute(
+            "INSERT OR REPLACE INTO jobs(kind,status,payload) VALUES(?,?,?)",
+            ("harvest", "dup_sha", f'{{"report_id":{rid},"same_as":{dup[0]}}}'))
+        con.commit()
+        return "dup"
+    _write_locked(
+        con,
+        """UPDATE reports SET sha256=?, path=?, fetched_at=?,
+           acquired_at=?, acquisition_method=? WHERE id=?""",
+        (sha, path, now(), now(), method, rid))
+    return "ok"
+
+
+def fetch_issuer(r, retries=2):
+    """Direct fetch of an issuer-hosted PDF. Returns (id, status, body);
+    403/429 = host refuses our UA/ip — retryable later, not a hard miss."""
+    for attempt in range(retries):
+        status, body, rc, elapsed = curl_fetch(r["url"], proxy=None,
+                                               timeout=120)
+        if status == 200 and rc == 0:
+            return r["id"], status, body
+        if status in (404, 410):
+            return r["id"], status, b""
+        time.sleep(3 * (attempt + 1))
+    return r["id"], status, b""
+
+
+def run_issuer(con, limit=0, workers=20):
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    rows = pending_issuer(con, limit)
+    con.execute("PRAGMA busy_timeout=120000")
+    ok = miss = dup = 0
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        futs = {ex.submit(fetch_issuer, r): r for r in rows}
+        for i, fut in enumerate(as_completed(futs), 1):
+            rid, status, body = fut.result()
+            if status == 200:
+                try:
+                    res = _commit_pdf(con, rid, body, "issuer_direct")
+                    if res == "ok":
+                        ok += 1
+                    else:
+                        dup += 1
+                except ValueError:
+                    _write_locked(
+                        con,
+                        "INSERT OR REPLACE INTO jobs(kind,status,payload) "
+                        "VALUES(?,?,?)",
+                        ("harvest", "issuer_fail",
+                         f'{{"report_id":{rid},"status":{status}}}'))
+            elif status in (404, 410):
+                _write_locked(
+                    con,
+                    "INSERT OR REPLACE INTO jobs(kind,status,payload) "
+                    "VALUES(?,?,?)",
+                    ("harvest", "issuer_miss", f'{{"report_id":{rid}}}'))
+                miss += 1
+            else:
+                _write_locked(
+                    con,
+                    "INSERT OR REPLACE INTO jobs(kind,status,payload) "
+                    "VALUES(?,?,?)",
+                    ("harvest", "issuer_fail",
+                     f'{{"report_id":{rid},"status":{status}}}'))
+            if i % 50 == 0:
+                print(f"issuer: {ok} fetched, {miss} miss, {dup} dup, "
+                      f"{i - ok - miss - dup} fail ({i}/{len(rows)})",
+                      flush=True)
+    return ok, miss
+
+
 def run(con, limit=0, workers=4):
     from concurrent.futures import ThreadPoolExecutor, as_completed
     proxy = os.environ.get("ESG_PROXY")
@@ -448,13 +561,8 @@ def run(con, limit=0, workers=4):
             r = futs[fut]
             if status == 200:
                 try:
-                    path, sha = sha256_store_put(body)
-                    _write_locked(
-                        con,
-                        """UPDATE reports SET sha256=?, path=?, fetched_at=?,
-                           acquired_at=?, acquisition_method=? WHERE id=?""",
-                        (sha, path, now(), now(),
-                         "tor_tunnel" if proxy else "http_get", rid))
+                    _commit_pdf(con, rid, body,
+                                "tor_tunnel" if proxy else "http_get")
                     ok += 1
                 except ValueError:
                     _write_locked(
@@ -490,6 +598,9 @@ def main():
                     help="ask IA Save Page Now to capture wb_miss RR PDFs")
     ap.add_argument("--commoncrawl", action="store_true",
                     help="fetch RR PDFs via Common Crawl WARC (no proxy)")
+    ap.add_argument("--issuer", action="store_true",
+                    help="fetch non-RR-hosted PDFs (dataneed/annualreports) "
+                    "direct from issuer domains — no shared throttle")
     a = ap.parse_args()
     con = db()
     if a.wayback or a.wayback_tor:
@@ -497,6 +608,9 @@ def main():
         print(f"wayback: {ok} fetched, {miss} not-archived")
     elif a.spn:
         run_spn(con, a.limit)
+    elif a.issuer:
+        ok, miss = run_issuer(con, a.limit, a.workers)
+        print(f"issuer: {ok} fetched, {miss} miss")
     elif a.commoncrawl:
         ok, miss = run_commoncrawl(con, a.limit, a.workers)
         print(f"commoncrawl: {ok} fetched, {miss} miss")
