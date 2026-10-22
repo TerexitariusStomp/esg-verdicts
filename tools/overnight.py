@@ -181,11 +181,18 @@ it = 0
 while not os.path.exists(STOP):
     it += 1
     keepalive()
-    if not running("m esg.harvest"):
+    # "m esg.harvest --workers" won't match the --wayback lane's cmdline
+    if not running("m esg.harvest --workers"):
         # bounded batch: process exits when drained, relaunch re-reads the
         # catalog so newly-crawled reports join the breadth-first queue
         bg([PY, "-m", "esg.harvest", "--workers", "6", "--limit", "800"],
             "harvest.log")
+    # Wayback lane: ~72% of pending RR PDFs are archived; IA serves them
+    # at multi-MB/s with no proxy and zero load on RR's edge. Big bound —
+    # the batch spans iterations so the lane never idles mid-run.
+    if not running("esg.harvest .*wayback"):
+        bg([PY, "-m", "esg.harvest", "--wayback", "--workers", "4",
+            "--limit", "5000"], "wayback.log")
     if not running("m esg.claims"):
         bg([PY, "-u", "-m", "esg.claims", "--workers", "8"], "claims.log")
     # geo is network-bound (Climate TRACE API), small per-company commits —

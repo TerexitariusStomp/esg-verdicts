@@ -91,6 +91,24 @@ def pending(con, limit=0):
     return con.execute(q).fetchall()
 
 
+def pending_wayback(con, limit=0):
+    """RR-hosted PDFs only, newest-cataloged first — the Tor lanes take
+    breadth order, so reverse-id order minimizes row collisions."""
+    q = """SELECT r.id, r.url FROM reports r
+           WHERE r.sha256 IS NULL
+             AND r.url LIKE '%responsibilityreports.com/HostedData/%.pdf'
+             AND r.id NOT IN (
+               SELECT CAST(json_extract(payload,'$.report_id') AS INT)
+               FROM jobs WHERE kind='harvest' AND status='wb_miss')
+           ORDER BY r.id DESC"""
+    if limit:
+        q += f" LIMIT {limit}"
+    return con.execute(q).fetchall()
+
+
+WB = "https://web.archive.org/web/2id_/"
+
+
 def fetch_one(r, proxy, retries=4):
     """One report: retries with NEWNYM rotation on 403 or a stalled/
     timed-out circuit (a dying exit can crawl at ~10KB/s and every lane
@@ -108,6 +126,61 @@ def fetch_one(r, proxy, retries=4):
         else:
             time.sleep(min(20, 2 ** attempt * 2))
     return r["id"], status, b""
+
+
+def fetch_wayback(r, timeout=90):
+    """Wayback first: IA serves archived RR PDFs at multi-MB/s without
+    touching RR's rate-limiting edge. '2' = latest capture, 'id_' = raw
+    bytes (no toolbar rewrite). A 404 means 'not archived' — the caller
+    must NOT treat it as a failed fetch; the Tor lane still owns the row."""
+    status, body, rc, elapsed = curl_fetch(
+        WB + r["url"], proxy=None, timeout=timeout)
+    return r["id"], status, body
+
+
+def run_wayback(con, limit=0, workers=4):
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    rows = pending_wayback(con, limit)
+    ok = miss = zero_run = 0
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        futs = {ex.submit(fetch_wayback, r): r for r in rows}
+        for i, fut in enumerate(as_completed(futs), 1):
+            rid, status, body = fut.result()
+            # IA soft-bans aggressive IPs with conn-refused (0) or 429 —
+            # a run of them means back off, not burn the batch at 50/s
+            if status in (0, 429):
+                zero_run += 1
+                if zero_run >= 30:
+                    print("wayback: IA throttling/refusing — "
+                          "backing off 10min", flush=True)
+                    time.sleep(600)
+                    zero_run = 0
+            else:
+                zero_run = 0
+            if status == 200:
+                try:
+                    path, sha = sha256_store_put(body)
+                    con.execute(
+                        """UPDATE reports SET sha256=?, path=?, fetched_at=?,
+                           acquired_at=?, acquisition_method='web_archive'
+                           WHERE id=?""",
+                        (sha, path, now(), now(), rid))
+                    ok += 1
+                except ValueError:
+                    pass  # capture wasn't a clean PDF — tor lane's job
+            elif status == 404:
+                # definitive "not archived" — tor lane keeps it, wayback
+                # skips it in later batches
+                con.execute(
+                    "INSERT OR REPLACE INTO jobs(kind,status,payload) "
+                    "VALUES(?,?,?)",
+                    ("harvest", "wb_miss", f'{{"report_id":{rid}}}'))
+            # other non-200 = IA hiccup — leave unmarked, retry next batch
+            con.commit()
+            if i % 50 == 0:
+                print(f"wayback: {ok} fetched, {i - ok} not-archived "
+                      f"({i}/{len(rows)})", flush=True)
+    return ok, i - ok if rows else 0
 
 
 def run(con, limit=0, workers=4):
@@ -152,10 +225,16 @@ def main():
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--workers", type=int, default=4,
                     help="concurrent curl lanes")
+    ap.add_argument("--wayback", action="store_true",
+                    help="fetch RR PDFs via Wayback Machine (no proxy)")
     a = ap.parse_args()
     con = db()
-    ok, fail = run(con, a.limit, a.workers)
-    print(f"harvest: {ok} fetched, {fail} failed")
+    if a.wayback:
+        ok, miss = run_wayback(con, a.limit, a.workers)
+        print(f"wayback: {ok} fetched, {miss} not-archived")
+    else:
+        ok, fail = run(con, a.limit, a.workers)
+        print(f"harvest: {ok} fetched, {fail} failed")
 
 
 if __name__ == "__main__":
