@@ -37,6 +37,8 @@ def process_report(con, rid, path):
     os.makedirs(f"{PAGES_DIR}/{rid}", exist_ok=True)
     pages = 0
     candidates = 0
+    to_insert = []  # defer writes — an open txn during the page loop
+    # holds the DB writer and starves other lanes (same fix as figures)
     for pno, txt in page_texts(path):
         pages += 1
         if not txt.strip():
@@ -50,10 +52,13 @@ def process_report(con, rid, path):
                 lang = lang_detect(txt[:1000])
             except Exception:
                 pass
-            con.execute(
-                "INSERT OR IGNORE INTO jobs(kind,status,payload) VALUES(?,?,?)",
+            to_insert.append(
                 ("extract", "pending",
                  f'{{"report_id":{rid},"page":{pno},"lang":"{lang}"}}'))
+    for kind, status, payload in to_insert:
+        con.execute(
+            "INSERT OR IGNORE INTO jobs(kind,status,payload) VALUES(?,?,?)",
+            (kind, status, payload))
     con.execute("UPDATE reports SET pages=?, parse_tier='text' WHERE id=?",
                 (pages, rid))
     # enqueue figure pass separately (runs only if figure deps present)

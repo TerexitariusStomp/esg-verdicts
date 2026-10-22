@@ -218,7 +218,7 @@ while not os.path.exists(STOP):
     for k, llm in ((0, "4"), (1, "2"), (2, "2")):
         if not running(f"esg.extract --shard {k}"):
             bg([PY, "-m", "esg.extract", "--shard", str(k), "3",
-                "--llm-workers", llm, "--batch", "6"],
+                "--llm-workers", llm, "--batch", "6", "--no-docling"],
                f"extract{k}.log")
     if not running("m esg.claims"):
         bg([PY, "-u", "-m", "esg.claims", "--workers", "8"], "claims.log")

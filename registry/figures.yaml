@@ -6,10 +6,10 @@ figures:
     value: 20996
     derivation: SELECT COUNT(*) FROM reports
   reports_harvested:
-    value: 958
+    value: 1114
     derivation: SELECT COUNT(*) FROM reports WHERE sha256 IS NOT NULL
   extractions:
-    value: 8176
+    value: 8182
     derivation: SELECT COUNT(*) FROM extractions
   facilities:
     value: 1152

@@ -18,7 +18,7 @@ import time
 from .esg import db, echo_gate, extract_json_list, gw_chat, gw_up, now
 
 
-def _lock_retry(fn, tries=6):
+def _lock_retry(fn, tries=12):
     """3 extract shards + harvest lanes share the writer; a slow peer can
     hold the lock past busy_timeout — retry with backoff instead of dying."""
     for t in range(tries):
@@ -463,7 +463,7 @@ def llm_extract_batch(texts):
             if isinstance(it, dict) and it.get("metric")]
 
 
-def process_job(con, job):
+def process_job(con, job, no_docling=False):
     """Regex tier (always) -> LLM tier only if regex found nothing on the page
     (the expensive path is reserved for pages determinism missed)."""
     p = json.loads(job["payload"])
@@ -509,8 +509,12 @@ def process_job(con, job):
                  it.get("scope"), it.get("target_year"), page, it["snippet"],
                  p.get("figure_crop"), it["confidence"], "table", None))
             inserted += 1
-    # docling layout tier: borderless tables pdfplumber can't see
-    if not inserted and pdf_path and CTX_RE.search(text):
+    # docling layout tier: borderless tables pdfplumber can't see.
+    # --no-docling skips it: CPU-side converts run minutes/page and stall
+    # the lanes; those pages fall to pending_llm where the gateway (far
+    # faster than CPU docling) picks them up echo-gated.
+    if not inserted and pdf_path and CTX_RE.search(text) \
+            and not no_docling:
         for it in docling_extract(pdf_path[0], page):
             if not echo_gate(it["snippet"], text):
                 continue
@@ -627,29 +631,37 @@ def main():
                     help="parallel gateway slots (llama-server n_slots)")
     ap.add_argument("--batch", type=int, default=3,
                     help="pages per gateway call (0 = one call per page)")
+    ap.add_argument("--no-docling", action="store_true",
+                    help="skip the CPU-docling tier (slow on lanes; LLM "
+                    "tier covers those pages)")
     ap.add_argument("--shard", type=int, nargs=2, metavar=("K", "N"),
                     help="process only jobs where id %% N = K — disjoint "
                     "shards parallelize pass-1 with no claim protocol")
     a = ap.parse_args()
     con = db()
     con.execute("PRAGMA busy_timeout=120000")
-    shard = f" AND id % {a.shard[1]} = {a.shard[0]}" if a.shard else ""
+    # shard by report_id (not job id): keeps every page of a report in the
+    # same shard so the one-entry pdfplumber/fitz caches actually hit;
+    # ordering by report first makes same-report jobs contiguous.
+    rid = "json_extract(payload,'$.report_id')"
+    shard = f" AND {rid} % {a.shard[1]} = {a.shard[0]}" if a.shard else ""
+    order = f" ORDER BY {rid}, id" if a.shard else " ORDER BY id"
     # pass 1: regex + context tiers on pending and previously-LLM-queued pages
     q = ("SELECT id, payload FROM jobs WHERE kind='extract' AND "
-         f"status IN ('pending','pending_llm'){shard} ORDER BY id")
+         f"status IN ('pending','pending_llm'){shard}{order}")
     if a.limit:
         q += f" LIMIT {a.limit}"
     total = 0
     for job in con.execute(q).fetchall():
-        total += _lock_retry(lambda: process_job(con, job))
+        total += _lock_retry(lambda: process_job(con, job, a.no_docling))
     print(f"extract regex: {total} metrics")
     # pass 2: LLM only where regex missed (or on all done pages if --llm),
     # parallel across the gateway's slots
     q2 = ("SELECT id, payload FROM jobs WHERE kind='extract' AND "
-          f"status='pending_llm'{shard} ORDER BY id")
+          f"status='pending_llm'{shard}{order}")
     if a.llm:
         q2 = ("SELECT id, payload FROM jobs WHERE kind='extract' AND "
-              f"status IN ('pending_llm','regex_done'){shard} ORDER BY id")
+              f"status IN ('pending_llm','regex_done'){shard}{order}")
     if a.limit:
         q2 += f" LIMIT {a.limit}"
     jobs = con.execute(q2).fetchall()

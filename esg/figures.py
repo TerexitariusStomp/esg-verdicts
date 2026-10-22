@@ -129,9 +129,13 @@ def ocr_image(path):
 
 def process_report(con, rid, path):
     crops = crop_images(rid, path, pages=candidate_pages(con, rid))
-    # hash-dedupe: reports reuse the same image across pages; OCR once
+    # hash-dedupe: reports reuse the same image across pages; OCR once.
+    # Collect writes and flush AFTER the OCR loop — an implicit txn open
+    # during slow inference holds the DB writer for minutes and starves
+    # every other lane (observed: extract shards parked >60s on locks).
     seen = set()
     n_ocr = 0
+    to_insert = []
     for c in crops:
         if c["sha256"] in seen:
             continue
@@ -139,8 +143,7 @@ def process_report(con, rid, path):
         txt = ocr_image(c["path"]) if (HAVE_ROCR or HAVE_TESS) else ""
         if txt.strip():
             n_ocr += 1
-            con.execute(
-                "INSERT OR IGNORE INTO jobs(kind,status,payload) VALUES(?,?,?)",
+            to_insert.append(
                 ("extract", "pending",
                  f'{{"report_id":{rid},"page":{c["page"]},"figure_crop":'
                  f'"{c["path"]}","figure_sha256":"{c["sha256"]}","lang":"en",'
@@ -148,6 +151,10 @@ def process_report(con, rid, path):
             # store OCR text next to the crop for echo-gating
             with open(c["path"] + ".ocr.txt", "w") as f:
                 f.write(txt)
+    for kind, status, payload in to_insert:
+        con.execute(
+            "INSERT OR IGNORE INTO jobs(kind,status,payload) VALUES(?,?,?)",
+            (kind, status, payload))
     return len(crops), n_ocr
 
 
