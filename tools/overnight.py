@@ -59,15 +59,24 @@ def capped(args):
             break
     out = ["systemd-run", "--user", "--scope", "--quiet", "--collect",
            "-p", f"MemoryMax={mem}"]
-    # extract shards + figures are multi-threaded CPU (docling/onnx spawn
-    # ~117 threads/process regardless of OMP_* envs) — taskset-pins them to
-    # cores 0-15 so cores 16-23 always stay free for the desktop. (cgroup
-    # AllowedCPUs needs cpuset delegation user scopes lack; taskset doesn't)
-    if any("esg.extract" in a or "esg.figures" in a for a in args):
+    # CPU pinning: torch/onnx in figures spawn ~117 threads/process no
+    # matter what OMP_* says, and pages/fitz spikes hard on PDF bursts.
+    # Giving each lane type its own sub-pool stops them fighting each
+    # other, and keeping EVERYTHING heavy off 12-23 leaves the desktop
+    # a guaranteed 12 cores. (cgroup AllowedCPUs needs cpuset delegation
+    # user scopes lack; taskset doesn't)
+    if "esg.figures" in args or "esg.pages" in args:
         return out + ["-p", "CPUWeight=30",
-                      "--setenv=OMP_NUM_THREADS=6",
-                      "--setenv=TORCH_NUM_THREADS=6",
-                      "taskset", "-c", "0-15"] + args
+                      "--setenv=OMP_NUM_THREADS=3",
+                      "--setenv=TORCH_NUM_THREADS=3",
+                      "taskset", "-c", "0-5"] + args
+    if any("esg.extract" in a for a in args):
+        return out + ["-p", "CPUWeight=30",
+                      "--setenv=OMP_NUM_THREADS=4",
+                      "--setenv=TORCH_NUM_THREADS=4",
+                      "taskset", "-c", "6-11"] + args
+    if "llama-server" in args[0]:
+        return out + ["taskset", "-c", "12-15"] + args
     return out + args
 
 
