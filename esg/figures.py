@@ -104,11 +104,20 @@ def crop_images(report_id, pdf_path, pages=None, max_crops=60):
 
 
 _ENGINE = None
+_ENGINE_CPU = None
 
 
-def ocr_engine():
-    global _ENGINE
-    if _ENGINE is None and HAVE_ROCR:
+def ocr_engine(cpu=False):
+    global _ENGINE, _ENGINE_CPU
+    if not HAVE_ROCR:
+        return None
+    if cpu:
+        if _ENGINE_CPU is None:
+            from rapidocr_onnxruntime import RapidOCR
+            _ENGINE_CPU = RapidOCR(det_use_cuda=False, cls_use_cuda=False,
+                                   rec_use_cuda=False)
+        return _ENGINE_CPU
+    if _ENGINE is None:
         from rapidocr_onnxruntime import RapidOCR
         _ENGINE = RapidOCR(det_use_cuda=HAVE_GPU, cls_use_cuda=HAVE_GPU,
                            rec_use_cuda=HAVE_GPU)
@@ -116,10 +125,16 @@ def ocr_engine():
 
 
 def ocr_image(path):
-    """OCR a crop -> text. GPU path ~0.2s/crop (20x CPU)."""
+    """OCR a crop -> text. GPU path ~0.2s/crop (20x CPU); a GPU failure
+    (e.g. VRAM contention with llama-server) falls back to CPU rather
+    than dropping the crop."""
     eng = ocr_engine()
     if eng:
-        res, _ = eng(path)
+        try:
+            res, _ = eng(path)
+        except Exception:
+            eng = ocr_engine(cpu=True)
+            res, _ = eng(path) if eng else (None, None)
         return "\n".join(r[1] for r in res or [])
     if HAVE_TESS:
         from PIL import Image

@@ -513,6 +513,14 @@ def process_job(con, job, no_docling=False):
         con.execute("UPDATE jobs SET status='no_text' WHERE id=?", (job["id"],))
         con.commit()
         return 0
+    # no NUM+UNIT on the page -> no metric can exist whose snippet
+    # echo-gates (regex/context match in text; table/LLM snippets are
+    # gated against it) — skip pdfplumber/docling/LLM outright
+    if not CTX_RE.search(text):
+        con.execute("UPDATE jobs SET status='regex_done' WHERE id=?",
+                    (job["id"],))
+        con.commit()
+        return 0
     inserted = 0
     for it in regex_extract(text) + context_extract(text):
         if not echo_gate(it["snippet"], text):
@@ -529,9 +537,11 @@ def process_job(con, job, no_docling=False):
     # table tier: structured cells before paying for the model.
     # path may be NULL — compact.py unlinks the raw PDF once page text
     # exists; compacted reports skip the file-dependent tiers entirely
+    # figure crops gate against OCR text — pdfplumber row text can't be
+    # a verbatim substring of it, so crop jobs skip file-backed tiers
     pdf_path = (con.execute("SELECT path FROM reports WHERE id=?",
                             (rid,)).fetchone()
-                if not inserted else None)
+                if not inserted and not p.get("figure_crop") else None)
     pdf_path = pdf_path[0] if pdf_path else None
     if pdf_path:
         for it in table_extract(pdf_path, page):
@@ -566,9 +576,6 @@ def process_job(con, job, no_docling=False):
                  it.get("scope"), it.get("target_year"), page, it["snippet"],
                  p.get("figure_crop"), it["confidence"], "docling", None))
             inserted += 1
-    # no NUM+UNIT on the page -> no metric can exist; skip LLM entirely
-    if not inserted and not CTX_RE.search(text):
-        inserted = -1
     status = "regex_done" if inserted else "pending_llm"
     con.execute("UPDATE jobs SET status=? WHERE id=?", (status, job["id"]))
     con.commit()
